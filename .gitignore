@@ -1,0 +1,10 @@
+vtr-verilog-to-routing-8.0.0/*
+vtr_work/*
+*.rpt
+*.net
+*.place
+*.route
+*.png
+*.tar.gz
+vpr*.log
+settings.json
