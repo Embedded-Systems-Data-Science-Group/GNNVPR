@@ -5,7 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
+from pympler import asizeof
 
+
+import sys
 class GCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         super(GCN, self).__init__()
@@ -54,9 +57,9 @@ def train(g, model):
         loss.backward()
         optimizer.step()
 
-        if e % 5 == 0:
-            print('In epoch {}, loss: {:.3f}, val acc: {:.3f} (best {:.3f}), test acc: {:.3f} (best {:.3f})'.format(
-                e, loss, val_acc, best_val_acc, test_acc, best_test_acc))   
+        # if e % 5 == 0:
+        #     print('In epoch {}, loss: {:.3f}, val acc: {:.3f} (best {:.3f}), test acc: {:.3f} (best {:.3f})'.format(
+        #         e, loss, val_acc, best_val_acc, test_acc, best_test_acc))   
 def testDGL_CPU():
     dataset = dgl.data.CoraGraphDataset()
     g = dataset[0]
@@ -67,7 +70,7 @@ def testDGL_GPU():
     dataset = dgl.data.CoraGraphDataset()
     g = dataset[0]
     g = g.to('cuda')
-    model = GCN(g.ndata['feat'].shape[1], 16, dataset.num_classes)
+    model = GCN(g.ndata['feat'].shape[1], 16, dataset.num_classes).to('cuda')
     train(g, model)
 def main():
     # testDGL()
@@ -78,7 +81,7 @@ def main():
     
     print("Running GPU Cora Dataset")
     start_time = time.time()
-    testDGL_CPU()
+    testDGL_GPU()
     print("GPU Model Took %.2f seconds" % (time.time() - start_time))
       
 if __name__ == "__main__":

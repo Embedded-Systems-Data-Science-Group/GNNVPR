@@ -50,7 +50,7 @@ def main():
     # rr_graph_edges = parseXML_SAX('test.xml')
     # G = parseGraph()
     #Print Edge-List to file
-   
+    print("Hi")
       
 if __name__ == "__main__":
   
