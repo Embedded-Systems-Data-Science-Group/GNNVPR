@@ -39,8 +39,6 @@ def main(args):
         th.cuda.set_device(args.gpu)
 
     trainset = SSTDataset()
-    print("trainset trees: ", trainset.trees)
-    return
     train_loader = DataLoader(dataset=trainset,
                               batch_size=args.batch_size,
                               collate_fn=batcher(device),
