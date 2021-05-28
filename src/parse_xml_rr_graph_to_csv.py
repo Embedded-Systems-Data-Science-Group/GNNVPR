@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 #   savings as arch_benchmark.xml
 def collect_graph_info(directory):
     info = dict()
-    directory = "/mnt/d"+directory+""
+    directory = "/mnt/e"+directory+""
     files = glob.glob(os.path.join(directory, '*.xml'))        
     for f in files:
         bench_name = f.split('/')[-1].split('.')[0]
@@ -103,14 +103,14 @@ def main():
     dir2 = "MCNC_TITAN"
     dir3 = "TITAN_TITAN"
     dir4 = "TITAN_JR"
-    output_data = collect_graph_info("/benchmarks/EARCH_MCNC/")
+    output_data = collect_graph_info("/benchmarks/data/EARCH_MCNC/")
     outputCSV(dir1,output_data)
-    output_data = collect_graph_info("/benchmarks/STRATXIV_MCNC/")
-    outputCSV(dir2,output_data)
+    # output_data = collect_graph_info("/benchmarks/STRATXIV_MCNC/")
+    # outputCSV(dir2,output_data)
     # output_data = collect_graph_info("/benchmarks/STRATXIV_TITAN/")
     # outputCSV(dir3,output_data)
-    output_data = collect_graph_info("/benchmarks/STRATXIV_TITANJR/")
-    outputCSV(dir4,output_data)
+    # output_data = collect_graph_info("/benchmarks/STRATXIV_TITANJR/")
+    # outputCSV(dir4,output_data)
 
 if __name__ == "__main__":
   
