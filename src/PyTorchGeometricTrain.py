@@ -49,23 +49,18 @@ class TrainNodes:
         }
 
     def GetEdgeIndex(self):
-        return torch.tensor(
-                [
-                    [
-                        int(self.node_id) for i in range(len(self.dest_edges))
-                    ],
-                    [
-                        int(edge) for edge in self.dest_edges
-                    ]
-            ],
-            dtype=torch.int
-        )
+        return [
+                   int(self.node_id) for i in range(len(self.dest_edges))
+               ], \
+               [
+                   int(edge) for edge in self.dest_edges
+               ]
 
     def GetFeatures(self):
-        return torch.tensor([float(self.prev_cost)], dtype=torch.float)
+        return [float(self.prev_cost)]
 
     def GetTarget(self):
-        return torch.tensor([float(self.history_cost)], dtype=torch.float)
+        return [float(self.history_cost)]
 
 class TrainGraph:
     def __init__(self, bench_name):
@@ -121,10 +116,17 @@ class TrainGraph:
 
     def ToDataDict(self):
         # print("DataDict has {} elements".format(len(self.nodes.keys())))
+        src_nodes = list()
+        dest_nodes = list()
+        for node in self.nodes:
+            src_index, sink_index = self.nodes[node].GetEdgeIndex()
+            src_nodes = src_nodes + src_index
+            dest_nodes = dest_nodes + sink_index
         return {
-            "x": list(itertools.chain.from_iterable([self.nodes[node].GetFeatures() for node in self.nodes])),
-            "y": list(itertools.chain.from_iterable([self.nodes[node].GetTarget() for node in self.nodes])),
-            "edge_index": list(itertools.chain.from_iterable([self.nodes[node].GetEdgeIndex() for node in self.nodes])),
+            "x": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetFeatures() for node in self.nodes)], dtype=torch.float),
+            "y": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetTarget() for node in self.nodes)], dtype=torch.float),
+            #"edge_index": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetEdgeIndex() for node in self.nodes)], dtype=torch.long),
+            "edge_index": torch.tensor([src_nodes, dest_nodes], dtype=torch.long)
         }
 
 class GNNDataset(InMemoryDataset):
@@ -159,7 +161,8 @@ class GNNDataset(InMemoryDataset):
         for raw_path in self.raw_paths:
             print("processing... ", raw_path)
             graph = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
-            data = Data(graph.ToDataDict())
+            inputDict = graph.ToDataDict()
+            data = Data(x=inputDict["x"], y=inputDict["y"], edge_index=inputDict["edge_index"])
             data_list.append(data)
         print(self.raw_paths)
         data, slices = self.collate(data_list)
@@ -211,7 +214,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.pool2 = TopKPooling(128, ratio=0.8)
         self.conv3 = SAGEConv(128, 128)
         self.pool3 = TopKPooling(128, ratio=0.8)
-        #self.item_embedding = torch.nn.Embedding(num_embeddings=df.item_id.max() + 1, embedding_dim=embed_dim)
+        # self.item_embedding = torch.nn.Embedding(num_embeddings=7, embedding_dim=embed_dim)
         self.lin1 = torch.nn.Linear(256, 128)
         self.lin2 = torch.nn.Linear(128, 64)
         self.lin3 = torch.nn.Linear(64, 1)
@@ -222,10 +225,11 @@ class GraNNy_ViPeR(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
-        x = self.item_embedding(x)
-        x = x.squeeze(1)
+        # x = self.item_embedding(x)
+        # x = x.squeeze(1)
 
-        x = F.relu(self.conv1(x, edge_index))
+        # x = F.relu(self.conv1(x, edge_index))
+        x = self.act1(self.conv1(x, edge_index))
 
         x, edge_index, _, batch, _ = self.pool1(x, edge_index, None, batch)
         x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
