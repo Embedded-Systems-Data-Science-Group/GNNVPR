@@ -56,7 +56,12 @@ def parse_first_last_files(directory, outputDirectory):
     outputFirstLastCSV(outputDirectory, graphs)
 
 def FindSpecificFiles(directory, extension):
-    return glob.glob(os.path.join(directory, extension))
+    # print("Called FindSpecificFiles in drectory: ", directory, " with extension: ", extension)
+    # print("glob was sent...", os.path.join(directory, extension))
+    # print("glob returns...", glob.glob(os.path.join(directory, extension)))
+    # return glob.glob(os.path.join(directory, extension))
+    # print(os.listdir(directory))
+    return [f for f in os.listdir(directory) if f.endswith(extension)]
 
 def parse_one_first_last_csv(f):
     match = re.search(CSV_FILE_STRING, f)

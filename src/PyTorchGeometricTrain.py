@@ -1,3 +1,5 @@
+import os
+
 import torch, csv, itertools
 import parse_xml_rr_graph_to_csv
 import torch.nn.functional as F
@@ -5,7 +7,7 @@ import numpy as np
 from optparse import OptionParser
 from sklearn.metrics import roc_auc_score
 from torch.nn import Sequential as Seq, Linear, ReLU
-from torch_geometric.data import InMemoryDataset, DataLoader
+from torch_geometric.data import Data, InMemoryDataset, DataLoader
 from torch_geometric.nn import MessagePassing, TopKPooling
 from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 from torch_geometric.utils import remove_self_loops, add_self_loops
@@ -47,19 +49,23 @@ class TrainNodes:
         }
 
     def GetEdgeIndex(self):
-        return torch.tensor([
+        return torch.tensor(
                 [
-                    self.node_id for i in range(len(self.dest_edges))],
-                    self.dest_edges
+                    [
+                        int(self.node_id) for i in range(len(self.dest_edges))
+                    ],
+                    [
+                        int(edge) for edge in self.dest_edges
+                    ]
             ],
             dtype=torch.int
         )
 
     def GetFeatures(self):
-        return torch.tensor([self.prev_cost], dtype=torch.float)
+        return torch.tensor([float(self.prev_cost)], dtype=torch.float)
 
     def GetTarget(self):
-        return torch.tensor([self.history_cost], dtype=torch.float)
+        return torch.tensor([float(self.history_cost)], dtype=torch.float)
 
 class TrainGraph:
     def __init__(self, bench_name):
@@ -108,43 +114,54 @@ class TrainGraph:
 
     def NodeFromDict(self, dict):
         node_id = dict["node_id"]
-        self.nodes["node_id"] = TrainNodes(node_id,
+        self.nodes[node_id] = TrainNodes(node_id,
                                            target_history_cost=dict["history_cost"],
                                            prev_history_cost=dict["prev_cost"],
                                            dest_edges=dict["dest_edges"])
 
     def ToDataDict(self):
+        # print("DataDict has {} elements".format(len(self.nodes.keys())))
         return {
-            "x": list(itertools.chain_from_iterable([self.nodes[node].GetFeatures() for node in self.nodes])),
-            "y": list(itertools.chain_from_iterable([self.nodes[node].GetTarget() for node in self.nodes])),
-            "edge_index": list(itertools.chain_from_iterable([self.nodes[node].GetEdgeIndex() for node in self.nodes])),
+            "x": list(itertools.chain.from_iterable([self.nodes[node].GetFeatures() for node in self.nodes])),
+            "y": list(itertools.chain.from_iterable([self.nodes[node].GetTarget() for node in self.nodes])),
+            "edge_index": list(itertools.chain.from_iterable([self.nodes[node].GetEdgeIndex() for node in self.nodes])),
         }
 
 class GNNDataset(InMemoryDataset):
 
-    def __init__(self, root, outDir, transform=None, pre_transform=None):
-        super(GNNDataset, self).__init__(root, transform, pre_transform)
-        self.dataDir = root
+    def __init__(self, root, inDir, outDir, transform=None, pre_transform=None, dataExtensions=".csv"):
+        print("Called init")
+        self.dataDir = inDir
         self.outDir = outDir
+        self.dataExtensions = dataExtensions
+        super(GNNDataset, self).__init__(root, transform, pre_transform)
+        self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self):
-        return parse_xml_rr_graph_to_csv.FindSpecificFiles(self.dataDir)
+        print("Called raw_file_names")
+        # return parse_xml_rr_graph_to_csv.FindSpecificFiles(self.dataDir)
+        return parse_xml_rr_graph_to_csv.FindSpecificFiles(self.dataDir, self.dataExtensions)
 
     @property
     def processed_file_names(self):
-        return [self.outDir]
+        print("Called processed_file_names")
+        return ['GNN_Processed_Data.pt']
 
     def download(self):
+        print("Called download")
         pass
 
     def process(self):
+        print("Called process")
         data_list = list()
         i = 0
         for raw_path in self.raw_paths:
+            print("processing... ", raw_path)
             graph = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
             data = Data(graph.ToDataDict())
             data_list.append(data)
+        print(self.raw_paths)
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
@@ -194,7 +211,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.pool2 = TopKPooling(128, ratio=0.8)
         self.conv3 = SAGEConv(128, 128)
         self.pool3 = TopKPooling(128, ratio=0.8)
-        self.item_embedding = torch.nn.Embedding(num_embeddings=df.item_id.max() + 1, embedding_dim=embed_dim)
+        #self.item_embedding = torch.nn.Embedding(num_embeddings=df.item_id.max() + 1, embedding_dim=embed_dim)
         self.lin1 = torch.nn.Linear(256, 128)
         self.lin2 = torch.nn.Linear(128, 64)
         self.lin3 = torch.nn.Linear(64, 1)
@@ -274,7 +291,7 @@ def main(options):
 
         return roc_auc_score(labels, predictions)
 
-    dataset = GNNDataset(options.inputDirectory)
+    dataset = GNNDataset(options.inputDirectory, options.inputDirectory, options.outputDirectory)
 
     dataset = dataset.shuffle()
     one_tenth_length = int(len(dataset) * 0.1)
@@ -292,7 +309,8 @@ def main(options):
     # num_categories = df.category.max() + 1
     # num_items, num_categories
 
-    device = torch.device('cuda')
+    # device = torch.device('cuda')
+    device = torch.device('cpu')
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     crit = torch.nn.BCELoss()
@@ -312,6 +330,8 @@ if __name__ == "__main__":
     parser.add_option("-I", "--inputDirectory", dest="inputDirectory",
                       help="directory that contains the benchmarks to be run", metavar="INPUT")
     parser.add_option("-O", "--outputDirectory", dest="outputDirectory",
+                      help="directory to output the completed model and metrics", metavar="OUTPUT")
+    parser.add_option("-r", "--rootDirectory", dest="rootDirectory",
                       help="directory to output the completed model and metrics", metavar="OUTPUT")
     (options, args) = parser.parse_args()
     # calling main function
