@@ -170,7 +170,7 @@ class GNNDataset(InMemoryDataset):
 
 class SAGEConv(MessagePassing):
     def __init__(self, in_channels, out_channels):
-        super(SAGEConv, self).__init__(aggr='max') #  "Max" aggregation.
+        super(SAGEConv, self).__init__(aggr='max', node_dim=-1) #  "Max" aggregation.
         self.lin = torch.nn.Linear(in_channels, out_channels)
         self.act = torch.nn.ReLU()
         self.update_lin = torch.nn.Linear(in_channels + out_channels, in_channels, bias=False)
@@ -240,9 +240,6 @@ class GraNNy_ViPeR(torch.nn.Module):
         x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
 
         x = F.relu(self.conv3(x, edge_index))
-
-        x, edge_index, _, batch, _ = self.pool3(x, edge_index, None, batch)
-        x3 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
 
         x = x1 + x2 + x3
 
