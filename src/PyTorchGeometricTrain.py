@@ -294,6 +294,7 @@ def main(options):
 
         predictions = []
         targets = []
+        maes = []
 
         with torch.no_grad():
             for data in loader:
@@ -301,13 +302,14 @@ def main(options):
                 pred = model(data).detach().cpu().numpy()
 
                 target = data.y.detach().cpu().numpy()
-                predictions.append(pred)
-                targets.append(target)
+                # predictions.append(pred)
+                # targets.append(target)
+                maes.append(mean_absolute_error(target, pred))
 
-        predictions = np.hstack(predictions)
-        targets = np.hstack(targets)
+        # predictions = np.hstack(predictions)
+        # targets = np.hstack(targets)
 
-        return mean_absolute_error(targets, predictions)
+        return sum(maes) / len(maes)
 
     dataset = GNNDataset(options.inputDirectory, options.inputDirectory, options.outputDirectory)
 
