@@ -1,3 +1,4 @@
+  
 import os
 
 import torch, csv, itertools, ast
@@ -217,15 +218,18 @@ class GraNNy_ViPeR(torch.nn.Module):
 
         # self.conv1 = SAGEConv(1, 128)
         self.conv1 = torch_geometric.nn.conv.SAGEConv(1, 128)
-        self.pool1 = TopKPooling(128, ratio=0.8)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
-        self.pool2 = TopKPooling(128, ratio=0.8)
         self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
-        self.pool3 = TopKPooling(128, ratio=0.8)
+        self.Tconv1 = torch_geometric.nn.conv.TAGConv(1,8)
+        self.Tconv2 = torch_geometric.nn.conv.TAGConv(8,1)
+        # self.pool1 = TopKPooling(128, ratio=0.8)
+        # self.pool2 = TopKPooling(128, ratio=0.8)
+        # self.pool3 = TopKPooling(128, ratio=0.8)
         # self.item_embedding = torch.nn.Embedding(num_embeddings=7, embedding_dim=embed_dim)
-        self.lin1 = torch.nn.Linear(256, 128)
-        self.lin2 = torch.nn.Linear(128, 64)
-        self.lin3 = torch.nn.Linear(64, 1)
+        self.lin1 = torch.nn.Linear(2, 1)
+        # self.lin1 = torch.nn.Linear(256, 128)
+        # self.lin2 = torch.nn.Linear(128, 64)
+        # self.lin3 = torch.nn.Linear(64, 1)
         self.bn1 = torch.nn.BatchNorm1d(128)
         self.bn2 = torch.nn.BatchNorm1d(64)
         self.act1 = torch.nn.ReLU()
@@ -233,40 +237,18 @@ class GraNNy_ViPeR(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
-        # x = self.item_embedding(x)
         # x = x.squeeze(1)
-        # x = torch.squeeze(x, 0)
-        x_shape = x.shape
 
-        try:
-            x = F.relu(self.conv1(x, edge_index))
-        except IndexError:
-            print("edge_index: ", edge_index)
-            raise IndexError
-        # x = self.act1(self.conv1(x, edge_index))
+        x1 = F.relu(self.conv1(x, edge_index))
+        x1 = F.relu(self.conv2(x1, edge_index))
+        x1 = F.relu(self.conv3(x1, edge_index))
 
-        # x, edge_index, _, batch, _, _ = self.pool1(x, edge_index, None, batch)
-        # x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
+        x2 = F.relu((self.Tconv1(x,edge_index)))
+        x2 = F.relu((self.Tconv2(x2,edge_index)))
 
-        x = F.relu(self.conv2(x, edge_index))
+        x = x1 + x2
 
-        # x, edge_index, _, batch, _, _ = self.pool2(x, edge_index, None, batch)
-        # x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
-
-        x = F.relu(self.conv3(x, edge_index))
-
-        # x, edge_index, _, batch, _, _ = self.pool3(x, edge_index, None, batch)
-        # x3 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
-
-        # x = x1 + x2 + x3
-
-        # x = self.lin1(x)
-        # x = self.act1(x)
-        # x = self.lin2(x)
-        # x = self.act2(x)
         x = F.dropout(x, p=0.5, training=self.training)
-
-        # x = torch.sigmoid(self.lin3(x)).squeeze(1)
 
         return x
 
@@ -283,7 +265,9 @@ def main(options):
             output = model(data)
 
             target = data.y.to(device)
-            loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32), target)
+            # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32), target)
+            loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+            # loss = torch.nn.MSELoss(reduce=True)(output.to(torch.float32), target)
             loss.backward()
             loss_all += data.num_graphs * loss.item()
             optimizer.step()
@@ -339,9 +323,10 @@ def main(options):
         train_loss = evaluate(train_loader)
         val_loss = evaluate(val_loader)
         test_loss = evaluate(test_loader)
-        print('Epoch: {:03d}, Loss: {:.5f}, Train Auc: {:.5f}, Val Auc: {:.5f}, Test Auc: {:.5f}'.
-              format(epoch, loss, train_loss, val_loss, test_loss))
-
+        if (epoch % 10 ==0) or epoch ==1:
+            print('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f}, Val MAE: {:.5f}, Test MAE: {:.5f}'.
+                format(epoch, loss, train_loss, val_loss, test_loss))
+    torch.save(model.state_dict(), "model.pt")
     return
 
 if __name__ == "__main__":
