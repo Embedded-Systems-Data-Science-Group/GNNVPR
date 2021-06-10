@@ -1,11 +1,13 @@
 import os
 
-import torch, csv, itertools
+import torch, csv, itertools, ast
+import torch_geometric.nn.conv
+
 import parse_xml_rr_graph_to_csv
 import torch.nn.functional as F
 import numpy as np
 from optparse import OptionParser
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import mean_absolute_error
 from torch.nn import Sequential as Seq, Linear, ReLU
 from torch_geometric.data import Data, InMemoryDataset, DataLoader
 from torch_geometric.nn import MessagePassing, TopKPooling
@@ -24,9 +26,13 @@ class TrainNodes:
         self.node_id = node_id
         self.history_cost = target_history_cost
         self.prev_cost = prev_history_cost
-        if startEdge == None: self.dest_edges = []
-        elif dest_edges == None: self.dest_edges = [startEdge]
-        else: self.dest_edges = dest_edges
+        if dest_edges != None:
+            if isinstance(dest_edges, str):
+                self.dest_edges = ast.literal_eval(dest_edges)
+            else:
+                self.dest_edges = dest_edges
+        elif startEdge != None: self.dest_edges = [startEdge]
+        else: self.dest_edges = []
 
     def AddHistory(self, history_cost):
         self.history_cost = history_cost
@@ -123,10 +129,10 @@ class TrainGraph:
             src_nodes = src_nodes + src_index
             dest_nodes = dest_nodes + sink_index
         return {
-            "x": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetFeatures() for node in self.nodes)], dtype=torch.float),
-            "y": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetTarget() for node in self.nodes)], dtype=torch.float),
+            "x": torch.tensor([[x] for x in itertools.chain.from_iterable(self.nodes[node].GetFeatures() for node in self.nodes)], dtype=torch.float),
+            "y": torch.tensor([[x] for x in itertools.chain.from_iterable(self.nodes[node].GetTarget() for node in self.nodes)], dtype=torch.float),
             #"edge_index": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetEdgeIndex() for node in self.nodes)], dtype=torch.long),
-            "edge_index": torch.tensor([src_nodes, dest_nodes], dtype=torch.long)
+            "edge_index": torch.tensor([[src, dest] for src, dest in zip(src_nodes, dest_nodes)], dtype=torch.long)
         }
 
 class GNNDataset(InMemoryDataset):
@@ -160,9 +166,10 @@ class GNNDataset(InMemoryDataset):
         i = 0
         for raw_path in self.raw_paths:
             print("processing... ", raw_path)
-            graph = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
-            inputDict = graph.ToDataDict()
-            data = Data(x=inputDict["x"], y=inputDict["y"], edge_index=inputDict["edge_index"])
+            # graph = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
+            # inputDict = graph.ToDataDict()
+            x, y, edge_index = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
+            data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
         print(self.raw_paths)
         data, slices = self.collate(data_list)
@@ -208,11 +215,12 @@ class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self):
         super(GraNNy_ViPeR, self).__init__()
 
-        self.conv1 = SAGEConv(embed_dim, 128)
+        # self.conv1 = SAGEConv(1, 128)
+        self.conv1 = torch_geometric.nn.conv.SAGEConv(1, 128)
         self.pool1 = TopKPooling(128, ratio=0.8)
-        self.conv2 = SAGEConv(128, 128)
+        self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
         self.pool2 = TopKPooling(128, ratio=0.8)
-        self.conv3 = SAGEConv(128, 128)
+        self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
         self.pool3 = TopKPooling(128, ratio=0.8)
         # self.item_embedding = torch.nn.Embedding(num_embeddings=7, embedding_dim=embed_dim)
         self.lin1 = torch.nn.Linear(256, 128)
@@ -227,29 +235,38 @@ class GraNNy_ViPeR(torch.nn.Module):
         x, edge_index, batch = data.x, data.edge_index, data.batch
         # x = self.item_embedding(x)
         # x = x.squeeze(1)
+        # x = torch.squeeze(x, 0)
+        x_shape = x.shape
 
-        # x = F.relu(self.conv1(x, edge_index))
-        x = self.act1(self.conv1(x, edge_index))
+        try:
+            x = F.relu(self.conv1(x, edge_index))
+        except IndexError:
+            print("edge_index: ", edge_index)
+            raise IndexError
+        # x = self.act1(self.conv1(x, edge_index))
 
-        x, edge_index, _, batch, _ = self.pool1(x, edge_index, None, batch)
-        x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
+        # x, edge_index, _, batch, _, _ = self.pool1(x, edge_index, None, batch)
+        # x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
 
         x = F.relu(self.conv2(x, edge_index))
 
-        x, edge_index, _, batch, _ = self.pool2(x, edge_index, None, batch)
-        x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
+        # x, edge_index, _, batch, _, _ = self.pool2(x, edge_index, None, batch)
+        # x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
 
         x = F.relu(self.conv3(x, edge_index))
 
-        x = x1 + x2 + x3
+        # x, edge_index, _, batch, _, _ = self.pool3(x, edge_index, None, batch)
+        # x3 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
 
-        x = self.lin1(x)
-        x = self.act1(x)
-        x = self.lin2(x)
-        x = self.act2(x)
+        # x = x1 + x2 + x3
+
+        # x = self.lin1(x)
+        # x = self.act1(x)
+        # x = self.lin2(x)
+        # x = self.act2(x)
         x = F.dropout(x, p=0.5, training=self.training)
 
-        x = torch.sigmoid(self.lin3(x)).squeeze(1)
+        # x = torch.sigmoid(self.lin3(x)).squeeze(1)
 
         return x
 
@@ -265,8 +282,8 @@ def main(options):
             optimizer.zero_grad()
             output = model(data)
 
-            label = data.y.to(device)
-            loss = crit(output, label)
+            target = data.y.to(device)
+            loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32), target)
             loss.backward()
             loss_all += data.num_graphs * loss.item()
             optimizer.step()
@@ -276,21 +293,21 @@ def main(options):
         model.eval()
 
         predictions = []
-        labels = []
+        targets = []
 
         with torch.no_grad():
             for data in loader:
                 data = data.to(device)
                 pred = model(data).detach().cpu().numpy()
 
-                label = data.y.detach().cpu().numpy()
+                target = data.y.detach().cpu().numpy()
                 predictions.append(pred)
-                labels.append(label)
+                targets.append(target)
 
         predictions = np.hstack(predictions)
-        labels = np.hstack(labels)
+        targets = np.hstack(targets)
 
-        return roc_auc_score(labels, predictions)
+        return mean_absolute_error(targets, predictions)
 
     dataset = GNNDataset(options.inputDirectory, options.inputDirectory, options.outputDirectory)
 
@@ -301,7 +318,7 @@ def main(options):
     test_dataset = dataset[one_tenth_length * 9:]
     len(train_dataset), len(val_dataset), len(test_dataset)
 
-    batch_size = 512
+    batch_size = 4
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -314,15 +331,14 @@ def main(options):
     device = torch.device('cpu')
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    crit = torch.nn.BCELoss()
 
     for epoch in range(1, 200):
         loss = train()
-        train_acc = evaluate(train_loader)
-        val_acc = evaluate(val_loader)
-        test_acc = evaluate(test_loader)
+        train_loss = evaluate(train_loader)
+        val_loss = evaluate(val_loader)
+        test_loss = evaluate(test_loader)
         print('Epoch: {:03d}, Loss: {:.5f}, Train Auc: {:.5f}, Val Auc: {:.5f}, Test Auc: {:.5f}'.
-              format(epoch, loss, train_acc, val_acc, test_acc))
+              format(epoch, loss, train_loss, val_loss, test_loss))
 
     return
 

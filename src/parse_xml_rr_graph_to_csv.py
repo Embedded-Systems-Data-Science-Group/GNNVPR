@@ -1,10 +1,13 @@
 #Python code to illustrate parsing of XML files
 # importing the required modules
+import ast
 import csv, re
 from io import StringIO, BytesIO
 # import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
+
+import torch
 from lxml import etree
 #import resource
 import os
@@ -17,6 +20,7 @@ import PyTorchGeometricTrain
 BENCH_NAME_STRING = r"\\([0-9A-Za-z]+)_[0-9A-Za-z]+.xml"
 FIRST_LAST_PARSE_STRING = r"([0-9A-Za-z]+)_(?:(first)_([0-9A-Za-z\.]+)|([0-9A-Za-z\.]+))_([0-9A-Za-z]+).csv"
 CSV_FILE_STRING = r"([0-9A-Za-z]+).csv"
+CACHE_CUTOFF = 28000
 
 def parse_first_last_files(directory, outputDirectory):
     fileList = [os.path.join(directory, fileDir) for fileDir in os.listdir(directory)]
@@ -64,6 +68,46 @@ def FindSpecificFiles(directory, extension):
     return [f for f in os.listdir(directory) if f.endswith(extension)]
 
 def parse_one_first_last_csv(f):
+    match = re.search(CSV_FILE_STRING, f)
+    if not match: return None
+    benchName = match.group(1)
+    # graph = PyTorchGeometricTrain.TrainGraph(benchName)
+    with open(f) as cF:
+        reader = csv.DictReader(cF)
+        lines = [row for row in reader]
+
+        x = []
+        y = []
+        edge_index = [[], []]
+        edge_index_cached = [[[], []]]
+        cache_tracker = 0
+
+        try:
+            for row_dict in Bar("Parsing "+f, max=len(lines)).iter(lines):
+                # graph.NodeFromDict(row)
+                node_id = int(row_dict["node_id"])
+                dest_edges = [int(dest) for dest in ast.literal_eval(row_dict["dest_edges"])]
+                src_edges = [node_id for edge in dest_edges]
+                # edge_index[0] = edge_index[0] + src_edges
+                # edge_index[1] = edge_index[1] + dest_edges
+                if len(edge_index_cached[cache_tracker][0]) >= CACHE_CUTOFF:
+                    cache_tracker += 1
+                    edge_index_cached.append([[], []])
+                edge_index_cached[cache_tracker][0] += src_edges
+                edge_index_cached[cache_tracker][1] += dest_edges
+                x.append([float(row_dict["prev_cost"])])
+                y.append([float(row_dict["history_cost"])])
+            for cache in edge_index_cached:
+                edge_index[0] += cache[0]
+                edge_index[1] += cache[1]
+        except KeyError:
+            print("KeyError on row: ", row_dict)
+            exit(1)
+    return torch.tensor(x, dtype=torch.float),\
+           torch.tensor(y, dtype=torch.float),\
+           torch.tensor(edge_index, dtype=torch.long)
+
+def parse_one_first_last_csv_old(f):
     match = re.search(CSV_FILE_STRING, f)
     if not match: return None
     benchName = match.group(1)
