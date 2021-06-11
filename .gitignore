@@ -1,5 +1,10 @@
 vtr-verilog-to-routing-8.0.0/*
+src/benchmarks/*
 vtr_work/*
+combined/*
+combined_test/*
+datasets/*
+datasets_test/*
 *.rpt
 *.net
 *.place
