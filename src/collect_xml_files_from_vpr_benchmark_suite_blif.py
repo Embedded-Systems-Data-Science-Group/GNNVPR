@@ -49,6 +49,7 @@ def collect_xml_rr_graph_per_directory(b, arch, directory):
 
 def main():
     Earch = "/benchmarks/arch/MCNC/EArch.xml"
+
     # titan ="/benchmarks/arch/TITAN/stratixiv_arch.timing.xml"
     # MCNC = "/benchmarks/data/arch"
     # collect_xml_rr_graph_per_directory(titan,"/benchmarks/blif/TITAN/")

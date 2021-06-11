@@ -181,6 +181,7 @@ def parse_historycosts_file(csvFile, graph, first=False):
 #   savings as arch_benchmark.xml
 def collect_graph_info(directory):
     info = dict()
+
     #directory = "/mnt/d"+directory+""
     files = glob.glob(os.path.join(directory, '*.xml'))        
     for f in files:
@@ -364,6 +365,7 @@ def main(options):
     dir2 = "MCNC_TITAN"
     dir3 = "TITAN_TITAN"
     dir4 = "TITAN_JR"
+
 
     # output_data = collect_graph_info(options.inputDirectory)
     # outputCSV(dir1,output_data)
