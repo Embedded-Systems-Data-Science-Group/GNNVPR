@@ -327,6 +327,7 @@ def main(options):
             print('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f}, Val MAE: {:.5f}, Test MAE: {:.5f}'.
                 format(epoch, loss, train_loss, val_loss, test_loss))
     torch.save(model.state_dict(), "model.pt")
+
     return
 
 if __name__ == "__main__":
