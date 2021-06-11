@@ -13,3 +13,4 @@ datasets_test/*
 *.tar.gz
 vpr*.log
 settings.json
+.gitignore
