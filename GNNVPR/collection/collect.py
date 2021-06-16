@@ -14,12 +14,31 @@ command['args'] = "--route_chan_width 300 -j 6"
 
 
 def ensure_dir(file_path):
+    """Function checks if directory exists & creates it if not.
+    Parameters
+    ----------
+    file_path : string
+            passed in directory path.
+    """
     directory = os.path.dirname(file_path)
     if not os.path.exists(directory):
         os.makedirs(directory)
 
 
-def parallel_test(arch, directory):
+def parallel_collect(arch, directory):
+    """This function attempts a parallelization of the data collection,
+    it calls collect_per_directory using pool.apply.
+
+    I don't this function works correctly, especially with IO &
+    the interpreter lock.
+
+    Parameters
+    ----------
+    arch : string
+       file path to architecture blif file.
+    directory : string
+        file path to the directory containing the set of benchmarks to run.
+    """
     directory = "/mnt/e"+directory
     arch = "/mnt/e"+arch
     pool = mp.Pool(mp.cpu_count())
@@ -30,13 +49,22 @@ def parallel_test(arch, directory):
 
 
 def collect_per_directory(b, arch, directory):
-    arch_name = arch.split('/')[-1].split('.')[0]
-    # print(arch_name)
-    # print(arch)
-    # print(directory)
-    # # Get the base
-    # # get archfile and directoryfile name
+    """For a given benchmark, execute the VTR-VPR Suite using subprocess.
 
+    Function Paramters should be updated, but sets the working directory &
+    call arguments using a global definition
+
+    Parameters
+    ----------
+    b : string
+        specific benchmark path given in the directory.
+    arch : string
+        file path to architecture blif file.
+    directory : string
+       file path to the directory containing the set of benchmarks
+       - unused here.
+    """
+    arch_name = arch.split('/')[-1].split('.')[0]
     bench_name = b.split('/')[-1].split('.')[0]
     version = bench_name+"_"+arch_name
     # Changed for Titan Collection
@@ -55,7 +83,10 @@ def collect_per_directory(b, arch, directory):
 
 
 def main():
-    """Used to run this file individually, usually with tests.
+    """This function collects batch runs a set of benchmarks.
+    VPR handles all the output of files
+
+    Should be updated to work based on input, at least from some options.
     """
     Earch = "/benchmarks/arch/MCNC/EArch.xml"
 
@@ -63,7 +94,7 @@ def main():
     # MCNC = "/benchmarks/data/arch"
     # collect_per_directory(titan,"/benchmarks/blif/TITAN/")
     # parallel_test(Earch,"/benchmarks/blif/MCNC/")
-    parallel_test(Earch, "/benchmarks/blif/MCNC/test/")
+    parallel_collect(Earch, "/benchmarks/blif/MCNC/test/")
     # parallel_test(titan,"/benchmarks/blif/TITAN/")
     # parallel_test(titan,"/benchmarks/blif/TITANJR/")
 
