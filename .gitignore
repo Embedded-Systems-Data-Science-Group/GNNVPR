@@ -14,3 +14,4 @@ datasets_test/*
 vpr*.log
 settings.json
 .gitignore
+gnn.code-workspace

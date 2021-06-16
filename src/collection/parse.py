@@ -1,37 +1,44 @@
-#Python code to illustrate parsing of XML files
-# importing the required modules
+"""Takes Collected Data & ensures format is good for DataLoader
+
+Returns:
+    csv: A combined csv containining graph features.
+"""
 import ast
-import csv, re
-from io import StringIO, BytesIO
+import csv
+import glob
+import os
+import re
+import xml.etree.ElementTree as ET
 # import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
 
+import PyTorchGeometricTrain
 import torch
 from lxml import etree
-#import resource
-import os
-import glob
-import xml.etree.ElementTree as ET
 from progress.bar import Bar
-#from PyTorchGeometricTrain import TrainGraph
-import PyTorchGeometricTrain
 
 BENCH_NAME_STRING = r"\\([0-9A-Za-z]+)_[0-9A-Za-z]+.xml"
-FIRST_LAST_PARSE_STRING = r"([0-9A-Za-z]+)_(?:(first)_([0-9A-Za-z\.]+)|([0-9A-Za-z\.]+))_([0-9A-Za-z]+).csv"
+FIRST_LAST_PARSE_STRING = r'''([0-9A-Za-z]+)_
+                                (?:(first)_([0-9A-Za-z\.]+)|([0-9A-Za-z\.]+))_
+                                ([0-9A-Za-z]+).csv'''
 CSV_FILE_STRING = r"([0-9A-Za-z]+).csv"
 CACHE_CUTOFF = 28000
 
+
 def parse_first_last_files(directory, outputDirectory):
-    fileList = [os.path.join(directory, fileDir) for fileDir in os.listdir(directory)]
-    matchList = [re.search(FIRST_LAST_PARSE_STRING, filename) for filename in os.listdir(directory)]
+    fileList = [os.path.join(directory, fileDir)
+                for fileDir in os.listdir(directory)]
+    matchList = [re.search(FIRST_LAST_PARSE_STRING, filename)
+                 for filename in os.listdir(directory)]
 
     graphs = dict()
 
-    #for match, filename in Bar('Parsing...').iter(zip(matchList, fileList)):
+    # for match, filename in Bar('Parsing...').iter(zip(matchList, fileList)):
     for match, filename in zip(matchList, fileList):
-        if not match: continue
-        overallBenchmark = match.group(1)
+        if not match:
+            continue
+        match.group(1)
         if match.group(2):
             first = True
             benchName = match.group(3)
@@ -41,7 +48,8 @@ def parse_first_last_files(directory, outputDirectory):
             benchName = match.group(4)
             # print("Set benchName: ", benchName)
 
-        print("Match for {} file is {} and {}".format(filename, match.group(2), match.group(5)))
+        print("Match for {} file is {} and {}".format(
+            filename, match.group(2), match.group(5)))
 
         if benchName in graphs:
             graph = graphs[benchName]
@@ -49,7 +57,7 @@ def parse_first_last_files(directory, outputDirectory):
             graph = PyTorchGeometricTrain.TrainGraph(benchName)
             graphs[benchName] = graph
 
-        if match.group(5) == "edgelist" and first == False:
+        if match.group(5) == "edgelist" and first is False:
             # Process edgeList File
             print("parsing: ", filename)
             parse_edgeList_file(filename, graph)
@@ -59,18 +67,22 @@ def parse_first_last_files(directory, outputDirectory):
 
     outputFirstLastCSV(outputDirectory, graphs)
 
+
 def FindSpecificFiles(directory, extension):
-    # print("Called FindSpecificFiles in drectory: ", directory, " with extension: ", extension)
+    # print("Called FindSpecificFiles in drectory: ", directory, "
+    # with extension: ", extension)
     # print("glob was sent...", os.path.join(directory, extension))
     # print("glob returns...", glob.glob(os.path.join(directory, extension)))
     # return glob.glob(os.path.join(directory, extension))
     # print(os.listdir(directory))
     return [f for f in os.listdir(directory) if f.endswith(extension)]
 
+
 def parse_one_first_last_csv(f):
     match = re.search(CSV_FILE_STRING, f)
-    if not match: return None
-    benchName = match.group(1)
+    if not match:
+        return None
+    match.group(1)
     # graph = PyTorchGeometricTrain.TrainGraph(benchName)
     with open(f) as cF:
         reader = csv.DictReader(cF)
@@ -86,7 +98,8 @@ def parse_one_first_last_csv(f):
             for row_dict in Bar("Parsing "+f, max=len(lines)).iter(lines):
                 # graph.NodeFromDict(row)
                 node_id = int(row_dict["node_id"])
-                dest_edges = [int(dest) for dest in ast.literal_eval(row_dict["dest_edges"])]
+                dest_edges = [int(dest) for dest in ast.literal_eval(
+                    row_dict["dest_edges"])]
                 src_edges = [node_id for edge in dest_edges]
                 # edge_index[0] = edge_index[0] + src_edges
                 # edge_index[1] = edge_index[1] + dest_edges
@@ -104,12 +117,14 @@ def parse_one_first_last_csv(f):
             print("KeyError on row: ", row_dict)
             exit(1)
     return torch.tensor(x, dtype=torch.float),\
-           torch.tensor(y, dtype=torch.float),\
-           torch.tensor(edge_index, dtype=torch.long)
+        torch.tensor(y, dtype=torch.float),\
+        torch.tensor(edge_index, dtype=torch.long)
+
 
 def parse_one_first_last_csv_old(f):
     match = re.search(CSV_FILE_STRING, f)
-    if not match: return None
+    if not match:
+        return None
     benchName = match.group(1)
     graph = PyTorchGeometricTrain.TrainGraph(benchName)
     with open(f) as cF:
@@ -124,12 +139,14 @@ def parse_one_first_last_csv_old(f):
             exit(1)
     return graph
 
+
 def parse_first_last_csv(files):
     graphs = dict()
 
     for f in files:
         match = re.search(CSV_FILE_STRING, f)
-        if not match: continue
+        if not match:
+            continue
         benchName = match.group(1)
         graph = PyTorchGeometricTrain.TrainGraph(benchName)
         graphs[benchName] = graph
@@ -145,6 +162,7 @@ def parse_first_last_csv(files):
                 exit(1)
     return graphs
 
+
 def parse_edgeList_file(csvFile, graph):
 
     with open(csvFile) as cF:
@@ -158,6 +176,7 @@ def parse_edgeList_file(csvFile, graph):
                 print("Row found: ", row)
             graph.SafeAddEdge(node_id, sink_node)
 
+
 def parse_historycosts_file(csvFile, graph, first=False):
 
     with open(csvFile) as cF:
@@ -170,20 +189,25 @@ def parse_historycosts_file(csvFile, graph, first=False):
             try:
                 node_id = row["Node_ID"]
             except KeyError:
-                print("Node_ID not found... has: ", [key for key in row.keys()])
+                print("Node_ID not found... has: ",
+                      [key for key in row.keys()])
                 exit(1)
             history_cost = row["History_Cost"]
-            if first: graph.SafeAddPrevHistory(node_id, history_cost)
-            else: graph.SafeAddTargetHistory(node_id, history_cost)
+            if first:
+                graph.SafeAddPrevHistory(node_id, history_cost)
+            else:
+                graph.SafeAddTargetHistory(node_id, history_cost)
 
-# For the Provided directory, 
+# For the Provided directory,
 #   run all the blifs in there for each arch in arch-dir
 #   savings as arch_benchmark.xml
+
+
 def collect_graph_info(directory):
     info = dict()
 
-    #directory = "/mnt/d"+directory+""
-    files = glob.glob(os.path.join(directory, '*.xml'))        
+    # directory = "/mnt/d"+directory+""
+    files = glob.glob(os.path.join(directory, '*.xml'))
     for f in files:
         bench_name = f.split('/')[-1].split('.')[0]
         print("Parsing: ", bench_name)
@@ -194,12 +218,11 @@ def collect_graph_info(directory):
         info[bench_name]['name'] = bench_name
     return info
 
+
 def collect_graph_edges(nodeDirectory, historyDircctory, outputDirectory):
 
     print("nodeDirectory: ", nodeDirectory)
     files = glob.glob(os.path.join(nodeDirectory, '*.xml'))
-
-    graphs = []
 
     print("history directory: ", historyDircctory)
     print("Files: ", files)
@@ -213,7 +236,8 @@ def collect_graph_edges(nodeDirectory, historyDircctory, outputDirectory):
             bench_name = match.group(1)
         print("Parsing: ", f)
 
-        historyFile = os.path.join(historyDircctory, bench_name+"_historycosts.csv")
+        historyFile = os.path.join(
+            historyDircctory, bench_name+"_historycosts.csv")
         if not os.path.exists(historyFile):
             print("No history costs found for: ", bench_name)
             print("Looking for: ", historyFile)
@@ -225,6 +249,7 @@ def collect_graph_edges(nodeDirectory, historyDircctory, outputDirectory):
         outputGraphCSV(graph, outputDirectory)
 
     return graph
+
 
 def outputFirstLastCSV(outputDirectory, graphs):
     for graphID in graphs:
@@ -238,24 +263,29 @@ def outputFirstLastCSV(outputDirectory, graphs):
             for node in nodeDict:
                 writer.writerow(nodeDict[node].ToDict())
 
+
 def outputCSV(bench, output_data):
     csv_file = bench + ".csv"
     with open(csv_file, 'w') as csvfile:
-        writer = csv.DictWriter(csvfile,fieldnames=['name','nodes','edges'])
+        writer = csv.DictWriter(csvfile, fieldnames=['name', 'nodes', 'edges'])
         writer.writeheader()
-        versions = ['name','nodes','edges']
+        versions = ['name', 'nodes', 'edges']
         for key in output_data:
-            {field: output_data[key].get(field) or "EMPTY" for field in versions}
-            writer.writerow({field: output_data[key].get(field) or key for field in versions})
+            {field: output_data[key].get(
+                field) or "EMPTY" for field in versions}
+            writer.writerow({field: output_data[key].get(
+                field) or key for field in versions})
+
 
 def outputGraphCSV(output_graph):
     csv_file = output_graph.GetBenchName() + ".csv"
     with open(csv_file, 'w') as csvfile:
-        writer = csv.DictWriter(csvfile,fieldnames=output_graph.GetKeys())
+        writer = csv.DictWriter(csvfile, fieldnames=output_graph.GetKeys())
         writer.writeheader()
         nodeDict = output_graph.GetNodes()
         for node in nodeDict:
             writer.writerow(nodeDict[node].ToDict())
+
 
 def ParseHistoryCSV(CSVFile, bench_name):
     with open(CSVFile) as cFile:
@@ -278,6 +308,7 @@ def ParseHistoryCSV(CSVFile, bench_name):
             graph.AddNode(node_id, history_cost)
     return graph
 
+
 def parseXML(xmlfile):
     edges = []
     # create element tree object
@@ -287,25 +318,27 @@ def parseXML(xmlfile):
     # Get Edges as a List of Tuples
     for edge in root.iter('edge'):
         edges.append((edge.attrib['src_node'], edge.attrib['sink_node']))
-    print("Parsed ", len(edges)," edges")
+    print("Parsed ", len(edges), " edges")
     return edges
+
 
 def parseXML_SAX_Metrics(xmlfile):
     nodes = 0
-    edges = 0 
+    edges = 0
     # tree = etree.parse(xmlfile)
     print("Checking xml file: ", xmlfile)
-    context = etree.iterparse(xmlfile, events=('end',));
+    context = etree.iterparse(xmlfile, events=('end',))
     #  context = etree.iterparse(fp,)
     for action, elem in context:
-        if elem.tag=='node':
-            nodes+=1;
-        if elem.tag=='edge':
-            edges+=1
+        if elem.tag == 'node':
+            nodes += 1
+        if elem.tag == 'edge':
+            edges += 1
         elem.clear()
         while elem.getprevious() is not None:
             del elem.getparent()[0]
     return nodes, edges
+
 
 def parseXML_SAX_Edges(xmlfile, graph):
     # tree = etree.parse(xmlfile)
@@ -315,30 +348,32 @@ def parseXML_SAX_Edges(xmlfile, graph):
     #  context = etree.iterparse(fp,)
 
     for action, elem in Bar('Parsing '+xmlfile).iter(context):
-        if elem.tag=='edge':
+        if elem.tag == 'edge':
             src_node = elem.attrib.get('src_node')
             sink_node = elem.attrib.get('sink_node')
-            #switch_id = elem.attrib.get('switch_id')
+            # switch_id = elem.attrib.get('switch_id')
             graph.AddEdge(src_node, sink_node)
         elem.clear()
         while elem.getprevious() is not None:
             del elem.getparent()[0]
     return graph
 
+
 def parseXML_SAX(xmlfile):
     nodes = 0
-    edges = 0
-    context = etree.iterparse(xmlfile+'.xml', events=('end',));
+    context = etree.iterparse(xmlfile+'.xml', events=('end',))
     #  context = etree.iterparse(fp,)
     with open(xmlfile+'.txt', 'w') as filehandle:
         for action, elem in context:
-            if elem.tag=='node':
-                nodes+=1;
-                filehandle.write(' '.join(str(s) for s in (elem.attrib['id'], elem.attrib['id'])) + '\n')
+            if elem.tag == 'node':
+                nodes += 1
+                filehandle.write(' '.join(str(s) for s in (
+                    elem.attrib['id'], elem.attrib['id'])) + '\n')
             elem.clear()
             while elem.getprevious() is not None:
                 del elem.getparent()[0]
-    
+
+
 def parseGraph(rr_graph_edges):
     # # Create NetworkX Directed Graph
     # # G = nx.DiGraph()
@@ -358,14 +393,10 @@ def main(options):
     # rr_graph_edges = parseXML_SAX('test')
     # G = parseGraph()
     # Print Edge-List to file
-    # nodes, edges = parseXML_SAX_Metrics(os.getcwd()+'/benchmarks/XML/tseng_EArch')
+    # nodes, edges = parseXML_SAX_Metrics(os.getcwd()+
+    # '/benchmarks/XML/tseng_EArch')
 
-
-    dir1 = "MCNC_EARCH"
-    dir2 = "MCNC_TITAN"
-    dir3 = "TITAN_TITAN"
-    dir4 = "TITAN_JR"
-
+    pass
 
     # output_data = collect_graph_info(options.inputDirectory)
     # outputCSV(dir1,output_data)
@@ -385,14 +416,21 @@ def main(options):
     # output_data = collect_graph_info("/benchmarks/STRATXIV_TITANJR/")
     # outputCSV(dir4,output_data)
 
+
 if __name__ == "__main__":
     parser = OptionParser()
-    parser.add_option("-I", "--inputDirectory", dest="inputDirectory",
-                      help="directory that contains the benchmarks to be run", metavar="INPUT")
-    parser.add_option("-H", "--historyCostDirectory", dest="historyCostDirectory",
-                      help="directory that contains the historyCosts to train for", metavar="HISTORY")
-    parser.add_option("-O", "--outputDirectory", dest="outputDirectory",
-                      help="directory that contains the combined data files for training", metavar="OUTPUT")
+    parser.add_option("-i", "--inputDirectory", dest="inputDirectory",
+                      help="directory that contains the benchmarks to be run",
+                      metavar="INPUT")
+    parser.add_option("-h", "--historyCostDirectory",
+                      dest="historyCostDirectory",
+                      help="directory that contains the historyCosts to " /
+                            "train for",
+                      metavar="HISTORY")
+    parser.add_option("-o", "--outputDirectory", dest="outputDirectory",
+                      help="directory that contains the combined data files" /
+                            "for training",
+                      metavar="OUTPUT")
     (options, args) = parser.parse_args()
     # calling main function
     main(options)

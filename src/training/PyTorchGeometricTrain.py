@@ -1,21 +1,24 @@
-  
-import os
+"""Trains a GNN using PyTorchGeometric given a parsed graph dataset.
 
-import torch, csv, itertools, ast
-import torch_geometric.nn.conv
-
-import parse_xml_rr_graph_to_csv
-import torch.nn.functional as F
-import numpy as np
+Returns:
+    pkl file: an output model file as well as training results.
+"""
+import ast
+import itertools
 from optparse import OptionParser
+
+import torch
+import torch.nn.functional as F
+import torch_geometric.nn.conv
 from sklearn.metrics import mean_absolute_error
-from torch.nn import Sequential as Seq, Linear, ReLU
-from torch_geometric.data import Data, InMemoryDataset, DataLoader
-from torch_geometric.nn import MessagePassing, TopKPooling
-from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
-from torch_geometric.utils import remove_self_loops, add_self_loops
+from torch_geometric.data import Data, DataLoader, InMemoryDataset
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import add_self_loops, remove_self_loops
+
+import parse
 
 embed_dim = 128
+
 
 class TrainNodes:
     def __init__(self,
@@ -27,13 +30,15 @@ class TrainNodes:
         self.node_id = node_id
         self.history_cost = target_history_cost
         self.prev_cost = prev_history_cost
-        if dest_edges != None:
+        if dest_edges is not None:
             if isinstance(dest_edges, str):
                 self.dest_edges = ast.literal_eval(dest_edges)
             else:
                 self.dest_edges = dest_edges
-        elif startEdge != None: self.dest_edges = [startEdge]
-        else: self.dest_edges = []
+        elif startEdge is not None:
+            self.dest_edges = [startEdge]
+        else:
+            self.dest_edges = []
 
     def AddHistory(self, history_cost):
         self.history_cost = history_cost
@@ -57,17 +62,18 @@ class TrainNodes:
 
     def GetEdgeIndex(self):
         return [
-                   int(self.node_id) for i in range(len(self.dest_edges))
-               ], \
-               [
-                   int(edge) for edge in self.dest_edges
-               ]
+            int(self.node_id) for i in range(len(self.dest_edges))
+        ], \
+            [
+            int(edge) for edge in self.dest_edges
+        ]
 
     def GetFeatures(self):
         return [float(self.prev_cost)]
 
     def GetTarget(self):
         return [float(self.history_cost)]
+
 
 class TrainGraph:
     def __init__(self, bench_name):
@@ -85,7 +91,8 @@ class TrainGraph:
         return self.bench_name
 
     def AddNode(self, node_id, history_cost):
-        self.nodes[node_id] = TrainNodes(node_id, target_history_cost=history_cost)
+        self.nodes[node_id] = TrainNodes(
+            node_id, target_history_cost=history_cost)
 
     def AddEdge(self, src_node, sink_node):
         self.nodes[src_node].AddEdge(sink_node)
@@ -96,7 +103,8 @@ class TrainGraph:
         if node_id in self.nodes:
             self.nodes[node_id].AddHistory(target_history_cost)
         else:
-            self.nodes[node_id] = TrainNodes(node_id, target_history_cost=target_history_cost)
+            self.nodes[node_id] = TrainNodes(
+                node_id, target_history_cost=target_history_cost)
 
     def SafeAddPrevHistory(self, node_id, prev_history_cost):
         # if node_id == '0' or node_id == 0:
@@ -104,7 +112,8 @@ class TrainGraph:
         if node_id in self.nodes:
             self.nodes[node_id].AddPrev(prev_history_cost)
         else:
-            self.nodes[node_id] = TrainNodes(node_id, prev_history_cost=prev_history_cost)
+            self.nodes[node_id] = TrainNodes(
+                node_id, prev_history_cost=prev_history_cost)
 
     def SafeAddEdge(self, node_id, sink_node):
         # if node_id == '0' or node_id == 0:
@@ -116,10 +125,11 @@ class TrainGraph:
 
     def NodeFromDict(self, dict):
         node_id = dict["node_id"]
-        self.nodes[node_id] = TrainNodes(node_id,
-                                           target_history_cost=dict["history_cost"],
-                                           prev_history_cost=dict["prev_cost"],
-                                           dest_edges=dict["dest_edges"])
+        self.nodes[node_id] = TrainNodes(
+            node_id,
+            target_history_cost=dict["history_cost"],
+            prev_history_cost=dict["prev_cost"],
+            dest_edges=dict["dest_edges"])
 
     def ToDataDict(self):
         # print("DataDict has {} elements".format(len(self.nodes.keys())))
@@ -130,15 +140,26 @@ class TrainGraph:
             src_nodes = src_nodes + src_index
             dest_nodes = dest_nodes + sink_index
         return {
-            "x": torch.tensor([[x] for x in itertools.chain.from_iterable(self.nodes[node].GetFeatures() for node in self.nodes)], dtype=torch.float),
-            "y": torch.tensor([[x] for x in itertools.chain.from_iterable(self.nodes[node].GetTarget() for node in self.nodes)], dtype=torch.float),
-            #"edge_index": torch.tensor([x for x in itertools.chain.from_iterable(self.nodes[node].GetEdgeIndex() for node in self.nodes)], dtype=torch.long),
-            "edge_index": torch.tensor([[src, dest] for src, dest in zip(src_nodes, dest_nodes)], dtype=torch.long)
+            "x": torch.tensor([[x] for x in itertools.chain.from_iterable(
+                self.nodes[node].GetFeatures() for node in self.nodes)],
+                dtype=torch.float),
+            "y": torch.tensor([[x] for x in itertools.chain.from_iterable(
+                self.nodes[node].GetTarget() for node in self.nodes)],
+                dtype=torch.float),
+            # "edge_index": torch.tensor([x for x in
+            # itertools.chain.from_iterable(
+            # self.nodes[node].GetEdgeIndex() for node in self.nodes)],
+            # dtype=torch.long),
+            "edge_index": torch.tensor([[src, dest] for src, dest in zip(
+                src_nodes, dest_nodes)],
+                dtype=torch.long)
         }
+
 
 class GNNDataset(InMemoryDataset):
 
-    def __init__(self, root, inDir, outDir, transform=None, pre_transform=None, dataExtensions=".csv"):
+    def __init__(self, root, inDir, outDir, transform=None,
+                 pre_transform=None, dataExtensions=".csv"):
         print("Called init")
         self.dataDir = inDir
         self.outDir = outDir
@@ -149,8 +170,8 @@ class GNNDataset(InMemoryDataset):
     @property
     def raw_file_names(self):
         print("Called raw_file_names")
-        # return parse_xml_rr_graph_to_csv.FindSpecificFiles(self.dataDir)
-        return parse_xml_rr_graph_to_csv.FindSpecificFiles(self.dataDir, self.dataExtensions)
+        # return parse.FindSpecificFiles(self.dataDir)
+        return parse.FindSpecificFiles(self.dataDir, self.dataExtensions)
 
     @property
     def processed_file_names(self):
@@ -159,29 +180,30 @@ class GNNDataset(InMemoryDataset):
 
     def download(self):
         print("Called download")
-        pass
 
     def process(self):
         print("Called process")
         data_list = list()
-        i = 0
         for raw_path in self.raw_paths:
             print("processing... ", raw_path)
-            # graph = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
+            # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            x, y, edge_index = parse_xml_rr_graph_to_csv.parse_one_first_last_csv(raw_path)
+            x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
             data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
         print(self.raw_paths)
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
+
 class SAGEConv(MessagePassing):
     def __init__(self, in_channels, out_channels):
-        super(SAGEConv, self).__init__(aggr='max', node_dim=-1) #  "Max" aggregation.
+        # "Max" aggregation.
+        super(SAGEConv, self).__init__(aggr='max', node_dim=-1)
         self.lin = torch.nn.Linear(in_channels, out_channels)
         self.act = torch.nn.ReLU()
-        self.update_lin = torch.nn.Linear(in_channels + out_channels, in_channels, bias=False)
+        self.update_lin = torch.nn.Linear(
+            in_channels + out_channels, in_channels, bias=False)
         self.update_act = torch.nn.ReLU()
 
     def forward(self, x, edge_index):
@@ -220,12 +242,13 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.conv1 = torch_geometric.nn.conv.SAGEConv(1, 128)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
         self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
-        self.Tconv1 = torch_geometric.nn.conv.TAGConv(1,8)
-        self.Tconv2 = torch_geometric.nn.conv.TAGConv(8,1)
+        self.Tconv1 = torch_geometric.nn.conv.TAGConv(1, 8)
+        self.Tconv2 = torch_geometric.nn.conv.TAGConv(8, 1)
         # self.pool1 = TopKPooling(128, ratio=0.8)
         # self.pool2 = TopKPooling(128, ratio=0.8)
         # self.pool3 = TopKPooling(128, ratio=0.8)
-        # self.item_embedding = torch.nn.Embedding(num_embeddings=7, embedding_dim=embed_dim)
+        # self.item_embedding = torch.nn.Embedding(num_embeddings=7,
+        # embedding_dim=embed_dim)
         self.lin1 = torch.nn.Linear(2, 1)
         # self.lin1 = torch.nn.Linear(256, 128)
         # self.lin2 = torch.nn.Linear(128, 64)
@@ -236,15 +259,15 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.act2 = torch.nn.ReLU()
 
     def forward(self, data):
-        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x, edge_index,  = data.x, data.edge_index
         # x = x.squeeze(1)
-
+        # batch = data.batch
         x1 = F.relu(self.conv1(x, edge_index))
         x1 = F.relu(self.conv2(x1, edge_index))
         x1 = F.relu(self.conv3(x1, edge_index))
 
-        x2 = F.relu((self.Tconv1(x,edge_index)))
-        x2 = F.relu((self.Tconv2(x2,edge_index)))
+        x2 = F.relu((self.Tconv1(x, edge_index)))
+        x2 = F.relu((self.Tconv2(x2, edge_index)))
 
         x = x1 + x2
 
@@ -265,9 +288,11 @@ def main(options):
             output = model(data)
 
             target = data.y.to(device)
-            # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32), target)
+            # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
+            # target)
             loss = torch.nn.MSELoss()(output.to(torch.float32), target)
-            # loss = torch.nn.MSELoss(reduce=True)(output.to(torch.float32), target)
+            # loss = torch.nn.MSELoss(reduce=True)(output.to(torch.float32),
+            # target)
             loss.backward()
             loss_all += data.num_graphs * loss.item()
             optimizer.step()
@@ -276,8 +301,6 @@ def main(options):
     def evaluate(loader):
         model.eval()
 
-        predictions = []
-        targets = []
         maes = []
 
         with torch.no_grad():
@@ -295,7 +318,8 @@ def main(options):
 
         return sum(maes) / len(maes)
 
-    dataset = GNNDataset(options.inputDirectory, options.inputDirectory, options.outputDirectory)
+    dataset = GNNDataset(options.inputDirectory,
+                         options.inputDirectory, options.outputDirectory)
 
     dataset = dataset.shuffle()
     one_tenth_length = int(len(dataset) * 0.1)
@@ -323,21 +347,30 @@ def main(options):
         train_loss = evaluate(train_loader)
         val_loss = evaluate(val_loader)
         test_loss = evaluate(test_loader)
-        if (epoch % 10 ==0) or epoch ==1:
-            print('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f}, Val MAE: {:.5f}, Test MAE: {:.5f}'.
-                format(epoch, loss, train_loss, val_loss, test_loss))
+        if (epoch % 10 == 0) or epoch == 1:
+            print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
+                  'Val MAE: {:.5f}, Test MAE: {:.5f}').format(epoch, loss,
+                                                              train_loss,
+                                                              val_loss,
+                                                              test_loss))
     torch.save(model.state_dict(), "model.pt")
 
     return
 
+
 if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-I", "--inputDirectory", dest="inputDirectory",
-                      help="directory that contains the benchmarks to be run", metavar="INPUT")
+                      help="directory that contains the benchmarks to be run",
+                      metavar="INPUT")
     parser.add_option("-O", "--outputDirectory", dest="outputDirectory",
-                      help="directory to output the completed model and metrics", metavar="OUTPUT")
+                      help="directory to output the " +
+                      "completed model and metrics",
+                      metavar="OUTPUT")
     parser.add_option("-r", "--rootDirectory", dest="rootDirectory",
-                      help="directory to output the completed model and metrics", metavar="OUTPUT")
+                      help="directory to output the " +
+                      "completed model and metrics",
+                      metavar="OUTPUT")
     (options, args) = parser.parse_args()
     # calling main function
     main(options)
