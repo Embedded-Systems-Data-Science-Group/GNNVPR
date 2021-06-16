@@ -396,8 +396,6 @@ def main(options):
     # nodes, edges = parseXML_SAX_Metrics(os.getcwd()+
     # '/benchmarks/XML/tseng_EArch')
 
-    pass
-
     # output_data = collect_graph_info(options.inputDirectory)
     # outputCSV(dir1,output_data)
 
