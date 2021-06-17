@@ -5,17 +5,14 @@ Returns:
 """
 import ast
 import csv
-import glob
 import os
 import re
-import xml.etree.ElementTree as ET
 # import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
 
 import PyTorchGeometricTrain
 import torch
-from lxml import etree
 from progress.bar import Bar
 
 BENCH_NAME_STRING = r"\\([0-9A-Za-z]+)_[0-9A-Za-z]+.xml"
@@ -27,6 +24,17 @@ CACHE_CUTOFF = 28000
 
 
 def parse_first_last_files(directory, outputDirectory):
+    """[summary]
+
+    [extended_summary]
+
+    Parameters
+    ----------
+    directory : string
+        path to a directory of CSV files.
+    outputDirectory : string
+        [description]
+    """    
     fileList = [os.path.join(directory, fileDir)
                 for fileDir in os.listdir(directory)]
     matchList = [re.search(FIRST_LAST_PARSE_STRING, filename)
@@ -198,58 +206,6 @@ def parse_historycosts_file(csvFile, graph, first=False):
             else:
                 graph.SafeAddTargetHistory(node_id, history_cost)
 
-# For the Provided directory,
-#   run all the blifs in there for each arch in arch-dir
-#   savings as arch_benchmark.xml
-
-
-def collect_graph_info(directory):
-    info = dict()
-
-    # directory = "/mnt/d"+directory+""
-    files = glob.glob(os.path.join(directory, '*.xml'))
-    for f in files:
-        bench_name = f.split('/')[-1].split('.')[0]
-        print("Parsing: ", bench_name)
-        nodes, edges = parseXML_SAX_Metrics(f)
-        info[bench_name] = dict()
-        info[bench_name]['nodes'] = nodes
-        info[bench_name]['edges'] = edges
-        info[bench_name]['name'] = bench_name
-    return info
-
-
-def collect_graph_edges(nodeDirectory, historyDircctory, outputDirectory):
-
-    print("nodeDirectory: ", nodeDirectory)
-    files = glob.glob(os.path.join(nodeDirectory, '*.xml'))
-
-    print("history directory: ", historyDircctory)
-    print("Files: ", files)
-
-    for f in files:
-        match = re.search(BENCH_NAME_STRING, f)
-        if not match:
-            print("No bench name found for: ", f)
-            continue
-        else:
-            bench_name = match.group(1)
-        print("Parsing: ", f)
-
-        historyFile = os.path.join(
-            historyDircctory, bench_name+"_historycosts.csv")
-        if not os.path.exists(historyFile):
-            print("No history costs found for: ", bench_name)
-            print("Looking for: ", historyFile)
-            continue
-
-        graph = ParseHistoryCSV(historyFile, bench_name)
-        graph = parseXML_SAX_Edges(f, graph)
-
-        outputGraphCSV(graph, outputDirectory)
-
-    return graph
-
 
 def outputFirstLastCSV(outputDirectory, graphs):
     for graphID in graphs:
@@ -307,71 +263,6 @@ def ParseHistoryCSV(CSVFile, bench_name):
                     history_cost = element
             graph.AddNode(node_id, history_cost)
     return graph
-
-
-def parseXML(xmlfile):
-    edges = []
-    # create element tree object
-    tree = ET.parse(xmlfile)
-    # get root element
-    root = tree.getroot()
-    # Get Edges as a List of Tuples
-    for edge in root.iter('edge'):
-        edges.append((edge.attrib['src_node'], edge.attrib['sink_node']))
-    print("Parsed ", len(edges), " edges")
-    return edges
-
-
-def parseXML_SAX_Metrics(xmlfile):
-    nodes = 0
-    edges = 0
-    # tree = etree.parse(xmlfile)
-    print("Checking xml file: ", xmlfile)
-    context = etree.iterparse(xmlfile, events=('end',))
-    #  context = etree.iterparse(fp,)
-    for action, elem in context:
-        if elem.tag == 'node':
-            nodes += 1
-        if elem.tag == 'edge':
-            edges += 1
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    return nodes, edges
-
-
-def parseXML_SAX_Edges(xmlfile, graph):
-    # tree = etree.parse(xmlfile)
-    print("Checking xml file: ", xmlfile)
-    context = etree.iterparse(xmlfile, events=('end',))
-    print("After iterparse")
-    #  context = etree.iterparse(fp,)
-
-    for action, elem in Bar('Parsing '+xmlfile).iter(context):
-        if elem.tag == 'edge':
-            src_node = elem.attrib.get('src_node')
-            sink_node = elem.attrib.get('sink_node')
-            # switch_id = elem.attrib.get('switch_id')
-            graph.AddEdge(src_node, sink_node)
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    return graph
-
-
-def parseXML_SAX(xmlfile):
-    nodes = 0
-    context = etree.iterparse(xmlfile+'.xml', events=('end',))
-    #  context = etree.iterparse(fp,)
-    with open(xmlfile+'.txt', 'w') as filehandle:
-        for action, elem in context:
-            if elem.tag == 'node':
-                nodes += 1
-                filehandle.write(' '.join(str(s) for s in (
-                    elem.attrib['id'], elem.attrib['id'])) + '\n')
-            elem.clear()
-            while elem.getprevious() is not None:
-                del elem.getparent()[0]
 
 
 def parseGraph(rr_graph_edges):
