@@ -9,7 +9,6 @@ import subprocess
 
 command = dict()
 command['initial'] = "$VTR_ROOT/vpr/vpr"
-# command['args'] = "--route_chan_width 300 -j 6 --write_rr_graph"
 command['args'] = "--route_chan_width 300 -j 6"
 
 
@@ -68,10 +67,9 @@ def collect_per_directory(b, arch, directory):
     bench_name = b.split('/')[-1].split('.')[0]
     version = bench_name+"_"+arch_name
     # Changed for Titan Collection
-    # xmlfile = "../../XML/"+version+".xml"
-    xmlfile = ""
+
     b_call = ""+command['initial']+" " + arch + \
-        " "+b+" "+command['args'] + " " + xmlfile
+        " "+b+" "+command['args'] + " "
     b_cwd = '/mnt/e/benchmarks'+"/Outputs/"+version+"/"
     ensure_dir(b_cwd)
     logging.debug(version+" started.")

@@ -6,3 +6,8 @@ VTR to VPR is an Open Source tool. We modify it in order to both collect data fo
 
 ## PyTorch & Pytorch Geometric
 We use PyTorch running a GNN that uses SAGE and TAG Convolutional layers from the papers here: 
+
+## How to Run:
+1. Data Collection
+2. Data Preprocessing
+3. 
