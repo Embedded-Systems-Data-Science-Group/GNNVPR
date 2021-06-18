@@ -77,6 +77,22 @@ def parse_first_last_files(directory, outputDirectory):
 
 
 def FindSpecificFiles(directory, extension):
+    """[summary]
+
+    [extended_summary]
+
+    Parameters
+    ----------
+    directory : [type]
+        [description]
+    extension : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """    
     # print("Called FindSpecificFiles in drectory: ", directory, "
     # with extension: ", extension)
     # print("glob was sent...", os.path.join(directory, extension))
@@ -87,6 +103,20 @@ def FindSpecificFiles(directory, extension):
 
 
 def parse_one_first_last_csv(f):
+    """[summary]
+
+    [extended_summary]
+
+    Parameters
+    ----------
+    f : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """    
     match = re.search(CSV_FILE_STRING, f)
     if not match:
         return None
@@ -130,6 +160,20 @@ def parse_one_first_last_csv(f):
 
 
 def parse_one_first_last_csv_old(f):
+    """[summary]
+
+    [extended_summary]
+
+    Parameters
+    ----------
+    f : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """    
     match = re.search(CSV_FILE_STRING, f)
     if not match:
         return None
