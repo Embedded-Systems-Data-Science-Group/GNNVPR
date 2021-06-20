@@ -9,7 +9,7 @@ import subprocess
 
 command = dict()
 command['initial'] = "$VTR_ROOT/vpr/vpr"
-command['args'] = "--route_chan_width 300 -j 6"
+command['args'] = "--route_chan_width 300 -j 6 --collect_data on"
 
 
 def ensure_dir(file_path):
@@ -92,7 +92,7 @@ def main():
     # MCNC = "/benchmarks/data/arch"
     # collect_per_directory(titan,"/benchmarks/blif/TITAN/")
     # parallel_test(Earch,"/benchmarks/blif/MCNC/")
-    parallel_collect(Earch, "/benchmarks/blif/MCNC/test/")
+    parallel_collect(Earch, "/benchmarks/blif/MCNC/")
     # parallel_test(titan,"/benchmarks/blif/TITAN/")
     # parallel_test(titan,"/benchmarks/blif/TITANJR/")
 

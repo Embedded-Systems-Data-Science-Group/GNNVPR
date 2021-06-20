@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_option("-i", "--inputDirectory", dest="inputDirectory",
                       help="directory that contains the benchmarks to be run",
                       metavar="INPUT")
+    # ! Add an option to load in a saved model. 
     parser.add_option("-o", "--outputDirectory", dest="outputDirectory",
                       help="directory to output the completed model" +
                       "and metrics",
