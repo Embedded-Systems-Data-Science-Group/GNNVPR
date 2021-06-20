@@ -14,7 +14,6 @@ from sklearn.metrics import mean_absolute_error
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, remove_self_loops
-
 import parse
 
 embed_dim = 128
@@ -23,13 +22,17 @@ embed_dim = 128
 class TrainNodes:
     def __init__(self,
                  node_id,
-                 target_history_cost=None,
-                 prev_history_cost=None,
+                 node_type=None,
+                 capacity=None,
+                 history_cost=None,
+                 initial_cost=None,
                  startEdge=None,
                  dest_edges=None):
         self.node_id = node_id
-        self.history_cost = target_history_cost
-        self.prev_cost = prev_history_cost
+        self.history_cost = history_cost
+        self.initial_cost = initial_cost
+        self.node_type = node_type
+        self.capacity = capacity
         if dest_edges is not None:
             if isinstance(dest_edges, str):
                 self.dest_edges = ast.literal_eval(dest_edges)
@@ -43,8 +46,14 @@ class TrainNodes:
     def AddHistory(self, history_cost):
         self.history_cost = history_cost
 
-    def AddPrev(self, prev_cost):
-        self.prev_cost = prev_cost
+    def AddNodeType(self, node_type):
+        self.node_type = node_type
+
+    def AddCapacity(self, capacity):
+        self.capacity = capacity
+
+    def AddPrev(self, initial_cost):
+        self.initial_cost = initial_cost
 
     def AddEdge(self, node_id):
         self.dest_edges.append(node_id)
@@ -57,7 +66,9 @@ class TrainNodes:
             "node_id": self.node_id,
             "dest_edges": self.dest_edges,
             "history_cost": self.history_cost,
-            "prev_cost": self.prev_cost
+            "initial_cost": self.initial_cost,
+            "capacity": self.capacity,
+            "node_type": self.node_type
         }
 
     def GetEdgeIndex(self):
@@ -79,7 +90,8 @@ class TrainGraph:
     def __init__(self, bench_name):
         self.bench_name = bench_name
         self.nodes = {}
-        self.NodeKeys = ["node_id", "dest_edges", "history_cost", "prev_cost"]
+        self.NodeKeys = ["node_id", "dest_edges", "node_type", "capacity",
+                         "initial_Cost", "history_Cost"]
 
     def GetKeys(self):
         return self.NodeKeys
@@ -97,23 +109,41 @@ class TrainGraph:
     def AddEdge(self, src_node, sink_node):
         self.nodes[src_node].AddEdge(sink_node)
 
-    def SafeAddTargetHistory(self, node_id, target_history_cost):
+    def SafeAddHistoryCost(self, node_id, history_cost):
         # if node_id == '0' or node_id == 0:
         #     print("target_history_cost: ", target_history_cost)
         if node_id in self.nodes:
-            self.nodes[node_id].AddHistory(target_history_cost)
+            self.nodes[node_id].AddHistory(history_cost)
         else:
             self.nodes[node_id] = TrainNodes(
-                node_id, target_history_cost=target_history_cost)
+                node_id, history_cost=history_cost)
 
-    def SafeAddPrevHistory(self, node_id, prev_history_cost):
+    def SafeAddCapacity(self, node_id, capacity):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddCapacity(capacity)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, capacity=capacity)
+
+    def SafeAddNodeType(self, node_id, node_type):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddNodeType(node_type)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, node_type=node_type)
+
+    def SafeAddInitialCost(self, node_id, initial_cost):
         # if node_id == '0' or node_id == 0:
         #     print("prev_history_cost: ", prev_history_cost)
         if node_id in self.nodes:
-            self.nodes[node_id].AddPrev(prev_history_cost)
+            self.nodes[node_id].AddPrev(initial_cost)
         else:
             self.nodes[node_id] = TrainNodes(
-                node_id, prev_history_cost=prev_history_cost)
+                node_id, initial_cost=initial_cost)
 
     def SafeAddEdge(self, node_id, sink_node):
         # if node_id == '0' or node_id == 0:
@@ -127,9 +157,12 @@ class TrainGraph:
         node_id = dict["node_id"]
         self.nodes[node_id] = TrainNodes(
             node_id,
-            target_history_cost=dict["history_cost"],
-            prev_history_cost=dict["prev_cost"],
-            dest_edges=dict["dest_edges"])
+            node_type=dict["node_type"],
+            dest_edges=dict["dest_edges"],
+            capacity=dict["capacity"],
+            initial_cost=dict["initial_cost"],
+            history_cost=dict["history_cost"]
+           )
 
     def ToDataDict(self):
         # print("DataDict has {} elements".format(len(self.nodes.keys())))
@@ -188,8 +221,8 @@ class GNNDataset(InMemoryDataset):
             print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
-            data = Data(x=x, y=y, edge_index=edge_index)
+            z, k, x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
+            data = Data(z=z, k=k, x=x, y=y, edge_index=edge_index)
             data_list.append(data)
         print(self.raw_paths)
         data, slices = self.collate(data_list)
