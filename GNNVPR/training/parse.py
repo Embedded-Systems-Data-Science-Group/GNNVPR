@@ -7,12 +7,14 @@ import ast
 import csv
 import os
 import re
+from functools import lru_cache
 # import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
 
 import PyTorchGeometricTrain
 import torch
+import numpy as np
 from progress.bar import Bar
 
 BENCH_NAME_STRING = r"\\([0-9A-Za-z]+)_[0-9A-Za-z]+.xml"
@@ -101,6 +103,8 @@ def FindSpecificFiles(directory, extension):
     # print(os.listdir(directory))
     return [f for f in os.listdir(directory) if f.endswith(extension)]
 
+# @lru_cache(maxsize=32)
+
 
 def parse_one_first_last_csv(f):
     """[summary]
@@ -128,8 +132,8 @@ def parse_one_first_last_csv(f):
 
         x = []
         y = []
-        k = []
-        z = []
+        # k = []
+        # z = []
         edge_index = [[], []]
         edge_index_cached = [[[], []]]
         cache_tracker = 0
@@ -148,20 +152,29 @@ def parse_one_first_last_csv(f):
                     edge_index_cached.append([[], []])
                 edge_index_cached[cache_tracker][0] += src_edges
                 edge_index_cached[cache_tracker][1] += dest_edges
-                z.append([float(row_dict["capacity"])])
-                k.append([float(row_dict["node_type"])])
-                x.append([float(row_dict["initial_cost"])])
+                
+                # k.append([float(row_dict["node_type"])])
+                a = float(row_dict["capacity"])
+                # b = float(row_dict["node_type"])
+                # c = float(row_dict["initial_cost"])
+                x.append([a])
+                
+                # x.append([float(row_dict["initial_cost"]),
+                #           float(row_dict["node_type"]),
+                #           float(row_dict["capacity"])])
+                
+                # x.append([float(row_dict["node_type"])])
+                # x.append([float(row_dict["capacity"])])
+
                 y.append([float(row_dict["history_cost"])])
-               
+                
             for cache in edge_index_cached:
                 edge_index[0] += cache[0]
                 edge_index[1] += cache[1]
         except KeyError:
             print("KeyError on row: ", row_dict)
             exit(1)
-    return torch.tensor(z, dtype=torch.float),\
-        torch.tensor(k, dtype=torch.float),\
-        torch.tensor(x, dtype=torch.float),\
+    return torch.tensor(x, dtype=torch.float),\
         torch.tensor(y, dtype=torch.float),\
         torch.tensor(edge_index, dtype=torch.long)
 

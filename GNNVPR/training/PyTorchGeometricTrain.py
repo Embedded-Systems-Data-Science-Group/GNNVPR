@@ -221,8 +221,8 @@ class GNNDataset(InMemoryDataset):
             print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            z, k, x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
-            data = Data(z=z, k=k, x=x, y=y, edge_index=edge_index)
+            x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
+            data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
         print(self.raw_paths)
         data, slices = self.collate(data_list)
@@ -270,7 +270,7 @@ class SAGEConv(MessagePassing):
 class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self):
         super(GraNNy_ViPeR, self).__init__()
-
+        self.num_features = 3
         # self.conv1 = SAGEConv(1, 128)
         self.conv1 = torch_geometric.nn.conv.SAGEConv(1, 128)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
@@ -370,7 +370,7 @@ def main(options):
     # num_categories = df.category.max() + 1
     # num_items, num_categories
 
-    # device = torch.device('cuda')
+    # device = torch.device("cuda")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)

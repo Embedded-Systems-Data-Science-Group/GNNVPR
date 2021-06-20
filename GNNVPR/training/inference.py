@@ -41,6 +41,10 @@ if __name__ == "__main__":
                       help="directory to output the completed model" +
                       "and metrics",
                       metavar="OUTPUT")
+    # Get Arch Name
+    #
+    # Get Circuit Name
+    #
     parser.add_option("-r", "--rootDirectory", dest="rootDirectory",
                       help="directory to output the completed model" +
                       "and metrics",
