@@ -25,12 +25,18 @@ class TrainNodes:
                  node_type=None,
                  capacity=None,
                  history_cost=None,
+                 src_node=None,
+                 sink_node=None,
+                 in_netlist=None,
                  initial_cost=None,
                  startEdge=None,
                  dest_edges=None):
         self.node_id = node_id
         self.history_cost = history_cost
         self.initial_cost = initial_cost
+        self.in_netlist = in_netlist
+        self.src_node = src_node
+        self.sink_node = sink_node
         self.node_type = node_type
         self.capacity = capacity
         if dest_edges is not None:
@@ -48,7 +54,16 @@ class TrainNodes:
 
     def AddNodeType(self, node_type):
         self.node_type = node_type
-
+        
+    def AddSrcNode(self, src_node):
+        self.src_node = src_node
+        
+    def AddSinkNode(self, sink_node):
+        self.sink_node = sink_node
+        
+    def AddInNetList(self, in_netlist):
+        self.in_netlist = in_netlist
+        
     def AddCapacity(self, capacity):
         self.capacity = capacity
 
@@ -68,7 +83,11 @@ class TrainNodes:
             "history_cost": self.history_cost,
             "initial_cost": self.initial_cost,
             "capacity": self.capacity,
-            "node_type": self.node_type
+            "node_type": self.node_type,
+            "in_netlist": self.in_netlist,
+            "src_node": self.src_node,
+            "sink_node": self.sink_node,
+
         }
 
     def GetEdgeIndex(self):
@@ -91,7 +110,8 @@ class TrainGraph:
         self.bench_name = bench_name
         self.nodes = {}
         self.NodeKeys = ["node_id", "dest_edges", "node_type", "capacity",
-                         "initial_Cost", "history_Cost"]
+                         "initial_Cost", "history_Cost", "src_node",
+                         "sink_node", "in_netlist"]
 
     def GetKeys(self):
         return self.NodeKeys
@@ -135,7 +155,34 @@ class TrainGraph:
         else:
             self.nodes[node_id] = TrainNodes(
                 node_id, node_type=node_type)
-
+            
+    def SafeAddSrcNode(self, node_id, src_node):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddSrcNode(src_node)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, src_node=src_node)
+            
+    def SafeAddSinkNode(self, node_id, sink_node):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddSinkNode(sink_node)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, node_type=sink_node)
+            
+    def SafeAddInNetlist(self, node_id, in_netlist):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddInNetlist(in_netlist)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, node_type=in_netlist)
+            
     def SafeAddInitialCost(self, node_id, initial_cost):
         # if node_id == '0' or node_id == 0:
         #     print("prev_history_cost: ", prev_history_cost)
@@ -161,7 +208,10 @@ class TrainGraph:
             dest_edges=dict["dest_edges"],
             capacity=dict["capacity"],
             initial_cost=dict["initial_cost"],
-            history_cost=dict["history_cost"]
+            history_cost=dict["history_cost"],
+            src_node=dict["src_node"],
+            sink_node=dict["sink_node"],
+            in_netlist=dict['in_netlist']
            )
 
     def ToDataDict(self):
@@ -270,7 +320,7 @@ class SAGEConv(MessagePassing):
 class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self):
         super(GraNNy_ViPeR, self).__init__()
-        self.NUM_FEATURES = 8
+        self.NUM_FEATURES = 11
         # self.conv1 = SAGEConv(1, 128)
         self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, 128)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
@@ -279,16 +329,21 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.Tconv2a = torch_geometric.nn.conv.TAGConv(8, 1)
         
         self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8,
-                                                       K=9)
-        self.Tconv2b = torch_geometric.nn.conv.TAGConv(8, 1, K=9)
+                                                       K=6)
+        self.Tconv2b = torch_geometric.nn.conv.TAGConv(8, 1, K=6)
         # self.pool1 = TopKPooling(128, ratio=0.8)
         # self.pool2 = TopKPooling(128, ratio=0.8)
         # self.pool3 = TopKPooling(128, ratio=0.8)
         # self.item_embedding = torch.nn.Embedding(num_embeddings=7,
         # embedding_dim=embed_dim)
-        self.lin1 = torch.nn.Linear(2, 1)
-        self.lin2 = torch.nn.Linear(2, 1)
+        self.lin1 = torch.nn.Linear(3, 1)
+        # self.lin2 = torch.nn.Linear(2, 1)
+        self.sig1a = torch.nn.Sigmoid()
+        self.sig1b = torch.nn.Sigmoid()
 
+        self.sig2 = torch.nn.Sigmoid()
+        
+        self.sig3 = torch.nn.Sigmoid()
         # self.lin1 = torch.nn.Linear(256, 128)
         # self.lin2 = torch.nn.Linear(128, 64)
         # self.lin3 = torch.nn.Linear(64, 1)
@@ -301,20 +356,31 @@ class GraNNy_ViPeR(torch.nn.Module):
         x, edge_index,  = data.x, data.edge_index
         # x = x.squeeze(1)
         # batch = data.batch
-        x1 = F.relu(self.conv1(x, edge_index))
-        x1 = F.relu(self.conv2(x1, edge_index))
+        # * Layer 1
+        x1 = self.conv1(x, edge_index)
+        # Sigmoid Here
+        x1 = self.sig1a(x1)
+        x1 = self.conv2(x1, edge_index)
+        # Sigmoid Here
+        x1 = self.sig1b(x1)
         x1 = F.relu(self.conv3(x1, edge_index))
-
-        x2 = F.relu((self.Tconv1a(x, edge_index)))
+        
+        # * Layer 2
+        x2 = self.Tconv1a(x, edge_index)
+        # Sigmoid Here
+        x2 = self.sig2(x2)
         x2 = F.relu((self.Tconv2a(x2, edge_index)))
 
-        x3 = F.relu((self.Tconv1b(x, edge_index)))
+        # * Layer 3
+        x3 = self.Tconv1b(x, edge_index)
+        # Sigmoid here
+        x3 = self.sig3(x3)
         x3 = F.relu((self.Tconv2b(x3, edge_index)))
         
-        x2 = torch.cat((x2, x3), dim=1)
-        x2 = F.relu(self.lin2(x2))
+        # x2 = torch.cat((x2, x3), dim=1)
+        # x2 = F.relu(self.lin2(x2))
         
-        x = torch.cat((x1, x2), dim=1)
+        x = torch.cat((x1, x2, x3), dim=1)
         x = F.relu(self.lin1(x))
 
         # x = F.dropout(x, p=0.5, training=self.training)

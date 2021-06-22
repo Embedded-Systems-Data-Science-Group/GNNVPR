@@ -6,6 +6,8 @@ Returns:
 import ast
 import csv
 import os
+import pandas as pd
+import time
 import re
 from sklearn.preprocessing import OneHotEncoder
 from functools import lru_cache
@@ -127,54 +129,89 @@ def parse_one_first_last_csv(f):
         return None
     match.group(1)
     # graph = PyTorchGeometricTrain.TrainGraph(benchName)
+    start_time = time.time()
     with open(f) as cF:
         reader = csv.DictReader(cF)
-        lines = [row for row in reader]
-        x = []
-        y = []
         edge_index = [[], []]
-        edge_index_cached = [[[], []]]
-        cache_tracker = 0
-        # Fix this to make it faster.
-        try:
-            for row_dict in Bar("Parsing "+f, max=len(lines)).iter(lines):
-                # graph.NodeFromDict(row)
-                node_id = int(row_dict["node_id"])
-                dest_edges = [int(dest) for dest in ast.literal_eval(
-                    row_dict["dest_edges"])]
-                src_edges = [node_id for edge in dest_edges]
-                # edge_index[0] = edge_index[0] + src_edges
-                # edge_index[1] = edge_index[1] + dest_edges
-                if len(edge_index_cached[cache_tracker][0]) >= CACHE_CUTOFF:
-                    cache_tracker += 1
-                    edge_index_cached.append([[], []])
-                edge_index_cached[cache_tracker][0] += src_edges
-                edge_index_cached[cache_tracker][1] += dest_edges
-                # k.append([float(row_dict["node_type"])])
+        # lines = [row for row in reader]
+        df = pd.DataFrame(data=reader)
+        raw_dest_edges = df['dest_edges']
+        for idx, row in raw_dest_edges.iteritems():
+            dest_edges = list((map(int, set(
+                                ast.literal_eval(row)))))
+            src_edges = [idx] * len(dest_edges)
+            edge_index[0] += src_edges
+            edge_index[1] += dest_edges
+        df = df.drop(['node_id'], axis=1)
+        df = df.drop(['dest_edges'], axis=1)
+
+        one_hot = pd.get_dummies(df['node_type'])
+        df = df.drop(['node_type'], axis=1)
+        df = df.join(one_hot)
+
+        df = df.apply(pd.to_numeric)
+
+        y = list(df['history_cost'].values)
+        y = [[i] for i in y]
+        df = df.drop(['history_cost'], axis=1)
+        x = df.values
+        print(df.head())
+        # x = []
+        # y = []
+
+        # edge_index_cached = [[[], []]]
+        # cache_tracker = 0
+
+        # Old Version
+        # try:
+        #     for row_dict in iter(lines):
+        #         # graph.NodeFromDict(row)
+        #         node_id = int(row_dict["node_id"])
+        #         # dest_edges = [int(dest) for dest in ast.literal_eval(
+        #         #     row_dict["dest_edges"])]
+        #         # src_edges = [node_id for edge in dest_edges]
+        #         dest_edges = list((map(int, set(
+        #                         ast.literal_eval(row_dict["dest_edges"])))))
+        #         src_edges = [node_id] * len(dest_edges)
+        #         # edge_index[0] = edge_index[0] + src_edges
+        #         # edge_index[1] = edge_index[1] + dest_edges
+        #         if len(edge_index_cached[cache_tracker][0]) >= CACHE_CUTOFF:
+        #             cache_tracker += 1
+        #             edge_index_cached.append([[], []])
+        #         edge_index_cached[cache_tracker][0] += src_edges
+        #         edge_index_cached[cache_tracker][1] += dest_edges
+        #         # k.append([float(row_dict["node_type"])])
                 
-                a = float(row_dict["capacity"])
-                # Do Some Sklearn magic. 
-                b = int(row_dict["node_type"])
-                c = float(row_dict["initial_cost"])
-                b_one = OneHotEncoder(handle_unknown='ignore')
-                b_one.fit([[0], [1], [2], [3], [4], [5]])
-                b = b_one.transform([[b]]).toarray()
+        #         a = float(row_dict["capacity"])
+        #         # Do Some Sklearn magic.
+        #         b = int(row_dict["node_type"])
+        #         c = float(row_dict["initial_cost"])
+        #         g = float(row_dict["src_node"])
+        #         e = float(row_dict["sink_node"])
+        #         f = float(row_dict["in_netlist"])
+
+        #         b_one = OneHotEncoder(handle_unknown='ignore')
+        #         b_one.fit([[0], [1], [2], [3], [4], [5]])
+        #         b = b_one.transform([[b]]).toarray()
               
-                d = list(b[0])
-                d.append(c)
-                d.append(a)
-               
-                # Extend not append because one-hot is different.
-                x.append(d)
+        #         d = list(b[0])
+        #         d.append(c)
+        #         d.append(a)
+        #         d.append(g)
+        #         d.append(e)
+        #         d.append(f)
+        #         # Extend not append because one-hot is different.
+        #         x.append(d)
                 
-                y.append([float(row_dict["history_cost"])])
+        #         y.append([float(row_dict["history_cost"])])
                 
-            for cache in edge_index_cached:
-                edge_index[0] += cache[0]
-                edge_index[1] += cache[1]
-        except KeyError:
-            print("KeyError on row: ", row_dict)
-            exit(1)
+        #     for cache in edge_index_cached:
+        #         edge_index[0] += cache[0]
+        #         edge_index[1] += cache[1]
+        # except KeyError:
+        #     print("KeyError on row: ", row_dict)
+        #     exit(1)
+    print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
     return torch.tensor(x, dtype=torch.float),\
         torch.tensor(y, dtype=torch.float),\
         torch.tensor(edge_index, dtype=torch.long)
