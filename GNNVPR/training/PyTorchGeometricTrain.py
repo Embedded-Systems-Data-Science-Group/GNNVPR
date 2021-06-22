@@ -270,19 +270,25 @@ class SAGEConv(MessagePassing):
 class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self):
         super(GraNNy_ViPeR, self).__init__()
-        self.num_features = 3
+        self.NUM_FEATURES = 8
         # self.conv1 = SAGEConv(1, 128)
-        self.conv1 = torch_geometric.nn.conv.SAGEConv(1, 128)
+        self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, 128)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
         self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
-        self.Tconv1 = torch_geometric.nn.conv.TAGConv(1, 8)
-        self.Tconv2 = torch_geometric.nn.conv.TAGConv(8, 1)
+        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8)
+        self.Tconv2a = torch_geometric.nn.conv.TAGConv(8, 1)
+        
+        self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8,
+                                                       K=9)
+        self.Tconv2b = torch_geometric.nn.conv.TAGConv(8, 1, K=9)
         # self.pool1 = TopKPooling(128, ratio=0.8)
         # self.pool2 = TopKPooling(128, ratio=0.8)
         # self.pool3 = TopKPooling(128, ratio=0.8)
         # self.item_embedding = torch.nn.Embedding(num_embeddings=7,
         # embedding_dim=embed_dim)
         self.lin1 = torch.nn.Linear(2, 1)
+        self.lin2 = torch.nn.Linear(2, 1)
+
         # self.lin1 = torch.nn.Linear(256, 128)
         # self.lin2 = torch.nn.Linear(128, 64)
         # self.lin3 = torch.nn.Linear(64, 1)
@@ -299,12 +305,19 @@ class GraNNy_ViPeR(torch.nn.Module):
         x1 = F.relu(self.conv2(x1, edge_index))
         x1 = F.relu(self.conv3(x1, edge_index))
 
-        x2 = F.relu((self.Tconv1(x, edge_index)))
-        x2 = F.relu((self.Tconv2(x2, edge_index)))
+        x2 = F.relu((self.Tconv1a(x, edge_index)))
+        x2 = F.relu((self.Tconv2a(x2, edge_index)))
 
-        x = x1 + x2
+        x3 = F.relu((self.Tconv1b(x, edge_index)))
+        x3 = F.relu((self.Tconv2b(x3, edge_index)))
+        
+        x2 = torch.cat((x2, x3), dim=1)
+        x2 = F.relu(self.lin2(x2))
+        
+        x = torch.cat((x1, x2), dim=1)
+        x = F.relu(self.lin1(x))
 
-        x = F.dropout(x, p=0.5, training=self.training)
+        # x = F.dropout(x, p=0.5, training=self.training)
 
         return x
 

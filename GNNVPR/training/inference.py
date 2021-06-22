@@ -1,6 +1,5 @@
 """Runs Inference on a specified input benchmark from a specified model.
 """
-
 import PyTorchGeometricTrain
 from optparse import OptionParser
 import pandas as pd
@@ -15,7 +14,7 @@ embed_dim = 128
 
 def main(options):
     model = PyTorchGeometricTrain.GraNNy_ViPeR().to('cuda')
-    model.load_state_dict(torch.load('model.pt'))
+    model.load_state_dict(torch.load('/home/spicygremlin/Github/CS220/model.pt'))
     model.eval()
 
     dataset = PyTorchGeometricTrain.GNNDataset(options.inputDirectory,
@@ -28,7 +27,10 @@ def main(options):
         pred = model(data).detach().cpu().numpy()
         print(pred)
         df = pd.DataFrame.from_dict(pred)
-        df.to_csv('output.csv', index=False)
+        # print("honkers")
+        df = df*3
+        df.to_csv('/mnt/e/benchmarks/Outputs/output.csv', index=False,
+                  header=False)
 
 
 if __name__ == "__main__":

@@ -74,6 +74,8 @@ def collect_per_directory(b, arch, directory):
     b_cwd = '/mnt/e/benchmarks'+"/Outputs/"+version+"/"
     ensure_dir(b_cwd)
     logging.debug(version+" started.")
+    print(b_call)
+    print(b_cwd)
     subprocess.run(b_call, cwd=b_cwd, shell=True,
                    capture_output=True, bufsize=1_000_000_000)
 

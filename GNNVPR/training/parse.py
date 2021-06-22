@@ -7,6 +7,7 @@ import ast
 import csv
 import os
 import re
+from sklearn.preprocessing import OneHotEncoder
 from functools import lru_cache
 # import networkx as nx
 # import matplotlib.pyplot as plt
@@ -129,15 +130,12 @@ def parse_one_first_last_csv(f):
     with open(f) as cF:
         reader = csv.DictReader(cF)
         lines = [row for row in reader]
-
         x = []
         y = []
-        # k = []
-        # z = []
         edge_index = [[], []]
         edge_index_cached = [[[], []]]
         cache_tracker = 0
-
+        # Fix this to make it faster.
         try:
             for row_dict in Bar("Parsing "+f, max=len(lines)).iter(lines):
                 # graph.NodeFromDict(row)
@@ -152,20 +150,23 @@ def parse_one_first_last_csv(f):
                     edge_index_cached.append([[], []])
                 edge_index_cached[cache_tracker][0] += src_edges
                 edge_index_cached[cache_tracker][1] += dest_edges
-                
                 # k.append([float(row_dict["node_type"])])
+                
                 a = float(row_dict["capacity"])
-                # b = float(row_dict["node_type"])
-                # c = float(row_dict["initial_cost"])
-                x.append([a])
+                # Do Some Sklearn magic. 
+                b = int(row_dict["node_type"])
+                c = float(row_dict["initial_cost"])
+                b_one = OneHotEncoder(handle_unknown='ignore')
+                b_one.fit([[0], [1], [2], [3], [4], [5]])
+                b = b_one.transform([[b]]).toarray()
+              
+                d = list(b[0])
+                d.append(c)
+                d.append(a)
+               
+                # Extend not append because one-hot is different.
+                x.append(d)
                 
-                # x.append([float(row_dict["initial_cost"]),
-                #           float(row_dict["node_type"]),
-                #           float(row_dict["capacity"])])
-                
-                # x.append([float(row_dict["node_type"])])
-                # x.append([float(row_dict["capacity"])])
-
                 y.append([float(row_dict["history_cost"])])
                 
             for cache in edge_index_cached:
