@@ -148,13 +148,18 @@ def parse_one_first_last_csv(f):
         one_hot = pd.get_dummies(df['node_type'])
         df = df.drop(['node_type'], axis=1)
         df = df.join(one_hot)
+        # ! We hate these features. DELETE THEM
+        df = df.drop(['src_node', 'sink_node'], axis=1)
 
         df = df.apply(pd.to_numeric)
 
         y = list(df['history_cost'].values)
         y = [[i] for i in y]
         df = df.drop(['history_cost'], axis=1)
+        # df = (df-df.min())/(df.max()-df.min())
+        # x = np.nan_to_num(df.values)
         x = df.values
+        
         print(df.head())
         # x = []
         # y = []

@@ -29,6 +29,8 @@ class TrainNodes:
                  sink_node=None,
                  in_netlist=None,
                  initial_cost=None,
+                 num_netlists=None,
+                 overused=None,
                  startEdge=None,
                  dest_edges=None):
         self.node_id = node_id
@@ -36,6 +38,8 @@ class TrainNodes:
         self.initial_cost = initial_cost
         self.in_netlist = in_netlist
         self.src_node = src_node
+        self.num_netlists = num_netlists
+        self.overused = overused
         self.sink_node = sink_node
         self.node_type = node_type
         self.capacity = capacity
@@ -63,6 +67,12 @@ class TrainNodes:
         
     def AddInNetList(self, in_netlist):
         self.in_netlist = in_netlist
+        
+    def AddOverused(self, overused):
+        self.overused = overused
+        
+    def AddNumNetlists(self, num_netlists):
+        self.num_netlists = num_netlists
         
     def AddCapacity(self, capacity):
         self.capacity = capacity
@@ -111,7 +121,7 @@ class TrainGraph:
         self.nodes = {}
         self.NodeKeys = ["node_id", "dest_edges", "node_type", "capacity",
                          "initial_Cost", "history_Cost", "src_node",
-                         "sink_node", "in_netlist"]
+                         "sink_node", "in_netlist", "num_netlists", "overused"]
 
     def GetKeys(self):
         return self.NodeKeys
@@ -146,6 +156,24 @@ class TrainGraph:
         else:
             self.nodes[node_id] = TrainNodes(
                 node_id, capacity=capacity)
+            
+    def SafeAddOverused(self, node_id, overused):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddOverused(overused)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, overused=overused)
+            
+    def SafeAddNumNetlists(self, node_id, num_netlists):
+        # if node_id == '0' or node_id == 0:
+        #     print("target_history_cost: ", target_history_cost)
+        if node_id in self.nodes:
+            self.nodes[node_id].AddNumNetlists(num_netlists)
+        else:
+            self.nodes[node_id] = TrainNodes(
+                node_id, num_netlists=num_netlists)
 
     def SafeAddNodeType(self, node_id, node_type):
         # if node_id == '0' or node_id == 0:
@@ -211,7 +239,9 @@ class TrainGraph:
             history_cost=dict["history_cost"],
             src_node=dict["src_node"],
             sink_node=dict["sink_node"],
-            in_netlist=dict['in_netlist']
+            in_netlist=dict['in_netlist'],
+            num_netlists=dict['num_netlists'],
+            overused=dict['overused']
            )
 
     def ToDataDict(self):
@@ -344,6 +374,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.sig2 = torch.nn.Sigmoid()
         
         self.sig3 = torch.nn.Sigmoid()
+        self.sig4 = torch.nn.Sigmoid()
         # self.lin1 = torch.nn.Linear(256, 128)
         # self.lin2 = torch.nn.Linear(128, 64)
         # self.lin3 = torch.nn.Linear(64, 1)
@@ -382,6 +413,10 @@ class GraNNy_ViPeR(torch.nn.Module):
         
         x = torch.cat((x1, x2, x3), dim=1)
         x = F.relu(self.lin1(x))
+        # x = self.sig4(self.lin1(x))
+        # x = torch.nn.functional.normalize(x)
+        # x = x/x.sum(0).expand_as(x) 
+        # x = x*4
 
         # x = F.dropout(x, p=0.5, training=self.training)
 
@@ -440,7 +475,7 @@ def main(options):
     test_dataset = dataset[one_tenth_length * 9:]
     len(train_dataset), len(val_dataset), len(test_dataset)
 
-    batch_size = 4
+    batch_size = 1
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -449,7 +484,7 @@ def main(options):
     # num_categories = df.category.max() + 1
     # num_items, num_categories
 
-    # device = torch.device("cuda")
+    # device = torch.device("cpu")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)

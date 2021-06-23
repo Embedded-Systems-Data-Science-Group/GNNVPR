@@ -4,6 +4,11 @@ import PyTorchGeometricTrain
 from optparse import OptionParser
 import pandas as pd
 import torch
+import glob
+import os
+import math
+import shutil
+from shutil import copyfile
 from torch_geometric.data import DataLoader
 
 embed_dim = 128
@@ -13,6 +18,12 @@ embed_dim = 128
 # from PyTorchGeometricTrain import GNNDataset
 
 def main(options):
+    proc_dir = options.inputDirectory+"processed/"
+    for file in glob.glob(os.path.join(proc_dir, "*.pt")):
+        os.remove(file)
+    dest_dir = options.inputDirectory+"raw/"
+    for file in glob.glob(os.path.join(options.inputDirectory, "*.csv")):
+        shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
     model = PyTorchGeometricTrain.GraNNy_ViPeR().to('cuda')
     model.load_state_dict(torch.load('/home/spicygremlin/Github/CS220/model.pt'))
     model.eval()
@@ -25,11 +36,19 @@ def main(options):
     for data in test_loader:
         data = data.to('cuda')
         pred = model(data).detach().cpu().numpy()
-        print(pred)
+        # print(pred)
         df = pd.DataFrame.from_dict(pred)
         # print("honkers")
-        df = df*3
-        df.to_csv('/mnt/e/benchmarks/Outputs/output.csv', index=False,
+        # df = (df-df.min())/(df.max() - df.min())
+        df = df * 10
+        
+        # def sigmoid(x):
+        #     return 1 / (1.0 + math.exp(-x))
+        # df = df.apply(sigmoid, axis=1)
+        # df = df*10
+        print(df)
+        print("Saving file to: ", os.getcwd())
+        df.to_csv('prediction.csv', index=False,
                   header=False)
 
 

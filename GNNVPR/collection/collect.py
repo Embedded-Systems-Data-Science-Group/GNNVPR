@@ -9,7 +9,7 @@ import subprocess
 
 command = dict()
 command['initial'] = "$VTR_ROOT/vpr/vpr"
-command['args'] = "--route_chan_width 300 -j 6 --collect_data on "
+command['args'] = "--route_chan_width 300 -j 6 --collect_data on"
 
 
 def ensure_dir(file_path):
@@ -66,12 +66,21 @@ def collect_per_directory(b, arch, directory):
     arch_name = arch.split('/')[-1].split('.')[0]
     bench_name = b.split('/')[-1].split('.')[0]
     version = bench_name+"_"+arch_name
+    inference = "inference/"
+    inf_r = "raw/"
+    inf_p = "processed/"
+    inf_c = "combined/"
     # Changed for Titan Collection
 
     b_call = ""+command['initial']+" " + arch + \
         " "+b+" "+command['args'] + " "
     b_cwd = '/mnt/e/benchmarks'+"/Outputs/"+version+"/"
+    #  Add Inference + raw, combined, processed subfolders.
     ensure_dir(b_cwd)
+    ensure_dir(b_cwd+inference)
+    ensure_dir(b_cwd+inference+inf_r)
+    ensure_dir(b_cwd+inference+inf_p)
+    ensure_dir(b_cwd+inference+inf_c)
     logging.debug(version+" started.")
     print(b_call)
     print(b_cwd)
@@ -89,14 +98,15 @@ def main():
     Should be updated to work based on input, at least from some options.
     """
     Earch = "/benchmarks/arch/MCNC/EArch.xml"
-
-    # titan ="/benchmarks/arch/TITAN/stratixiv_arch.timing.xml"
+    titan = "/benchmarks/arch/TITAN/stratixiv_arch.timing.xml"
     # MCNC = "/benchmarks/data/arch"
     # collect_per_directory(titan,"/benchmarks/blif/TITAN/")
     # parallel_test(Earch,"/benchmarks/blif/MCNC/")
+    # parallel_collect(titan, "/benchmarks/blif/MCNC/")
+    
     parallel_collect(Earch, "/benchmarks/blif/MCNC/")
-    # parallel_test(titan,"/benchmarks/blif/TITAN/")
-    # parallel_test(titan,"/benchmarks/blif/TITANJR/")
+    # parallel_collect(titan, "/benchmarks/blif/TITANJR/test/")
+    #  parallel_collect(titan, "/benchmarks/blif/TITAN/test/")
 
 
 if __name__ == "__main__":
