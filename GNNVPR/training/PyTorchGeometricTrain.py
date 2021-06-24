@@ -6,12 +6,14 @@ Returns:
 import ast
 import itertools
 from optparse import OptionParser
-
+import os
 import torch
 import torch.nn.functional as F
 import torch_geometric.nn.conv
 from sklearn.metrics import mean_absolute_error
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
+from torch_geometric.data import Data, DataLoader, Dataset
+
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, remove_self_loops
 import parse
@@ -269,7 +271,7 @@ class TrainGraph:
         }
 
 
-class GNNDataset(InMemoryDataset):
+class GNNDataset(Dataset):
 
     def __init__(self, root, inDir, outDir, transform=None,
                  pre_transform=None, dataExtensions=".csv"):
@@ -278,18 +280,19 @@ class GNNDataset(InMemoryDataset):
         self.outDir = outDir
         self.dataExtensions = dataExtensions
         super(GNNDataset, self).__init__(root, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        # self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self):
-        print("Called raw_file_names")
+        # print("Called raw_file_names")
         # return parse.FindSpecificFiles(self.dataDir)
         return parse.FindSpecificFiles(self.dataDir, self.dataExtensions)
 
     @property
     def processed_file_names(self):
-        print("Called processed_file_names")
-        return ['GNN_Processed_Data.pt']
+        # print("Called processed_file_names")
+        return ['GNN_Processed_Data_{}.pt'.format(i) for i in
+                range(len(self.raw_paths))]
 
     def download(self):
         print("Called download")
@@ -297,16 +300,25 @@ class GNNDataset(InMemoryDataset):
     def process(self):
         print("Called process")
         data_list = list()
-        for raw_path in self.raw_paths:
+        for num, raw_path in zip(range(len(self.raw_paths)), self.raw_paths):
             print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
             x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
             data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
+        
+            # data, slices = self.collate(data_list)
+            torch.save(data, os.path.join(self.processed_paths[num]))
+                       
         print(self.raw_paths)
-        data, slices = self.collate(data_list)
-        torch.save((data, slices), self.processed_paths[0])
+        
+    def len(self):
+        return len(self.processed_file_names)
+    
+    def get(self, idx):
+        data = torch.load(self.processed_paths[idx])
+        return data
 
 
 class SAGEConv(MessagePassing):
@@ -329,6 +341,7 @@ class SAGEConv(MessagePassing):
         return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
 
     def message(self, x_j):
+        
         # x_j has shape [E, in_channels]
 
         x_j = self.lin(x_j)
@@ -337,6 +350,7 @@ class SAGEConv(MessagePassing):
         return x_j
 
     def update(self, aggr_out, x):
+        
         # aggr_out has shape [N, out_channels]
 
         new_embedding = torch.cat([aggr_out, x], dim=1)
@@ -419,7 +433,6 @@ class GraNNy_ViPeR(torch.nn.Module):
         # x = x*4
 
         # x = F.dropout(x, p=0.5, training=self.training)
-
         return x
 
 
@@ -443,6 +456,7 @@ def main(options):
             loss.backward()
             loss_all += data.num_graphs * loss.item()
             optimizer.step()
+                                  
         return loss_all / len(train_dataset)
 
     def evaluate(loader):
@@ -458,11 +472,11 @@ def main(options):
                 target = data.y.detach().cpu().numpy()
                 # predictions.append(pred)
                 # targets.append(target)
-                maes.append(mean_absolute_error(target, pred))
+                maes.append(mean_absolute_error(target, pred))               
 
         # predictions = np.hstack(predictions)
         # targets = np.hstack(targets)
-
+    
         return sum(maes) / len(maes)
 
     dataset = GNNDataset(options.inputDirectory,
@@ -484,16 +498,19 @@ def main(options):
     # num_categories = df.category.max() + 1
     # num_items, num_categories
 
-    device = torch.device("cpu")
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     for epoch in range(1, 200):
         loss = train()
         train_loss = evaluate(train_loader)
+        
         val_loss = evaluate(val_loader)
+        
         test_loss = evaluate(test_loader)
+        
         if (epoch % 10 == 0) or epoch == 1:
             print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
                   'Val MAE: {:.5f}, Test MAE: {:.5f}').format(epoch, loss,
