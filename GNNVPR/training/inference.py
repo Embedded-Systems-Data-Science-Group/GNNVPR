@@ -24,7 +24,7 @@ def main(options):
     dest_dir = options.inputDirectory+"raw/"
     for file in glob.glob(os.path.join(options.inputDirectory, "*.csv")):
         shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
-    model = PyTorchGeometricTrain.GraNNy_ViPeR().to('cuda')
+    model = PyTorchGeometricTrain.GraNNy_ViPeR().to('cpu')
     model.load_state_dict(torch.load('/home/spicygremlin/Github/CS220/model.pt'))
     model.eval()
 
@@ -34,18 +34,17 @@ def main(options):
     test_loader = DataLoader(dataset, batch_size=1)
 
     for data in test_loader:
-        data = data.to('cuda')
+        data = data.to('cpu')
         pred = model(data).detach().cpu().numpy()
         # print(pred)
         df = pd.DataFrame.from_dict(pred)
         # print("honkers")
         # df = (df-df.min())/(df.max() - df.min())
-        df = df * 10
-        
+        # df = df * 8
         # def sigmoid(x):
         #     return 1 / (1.0 + math.exp(-x))
         # df = df.apply(sigmoid, axis=1)
-        # df = df*10
+        df = df*4
         print(df)
         print("Saving file to: ", os.getcwd())
         df.to_csv('prediction.csv', index=False,

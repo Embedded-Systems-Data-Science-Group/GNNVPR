@@ -11,6 +11,8 @@ datasets_test/*
 *.route
 *.png
 *.tar.gz
+*.csv
+*.pt
 vpr*.log
 settings.json
 .gitignore
@@ -117,3 +119,5 @@ GNNVPR/__pycache__/parse_xml_rr_graph_to_csv.cpython-38.pyc
 GNNVPR/__pycache__/parse_xml_rr_graph_to_csv.cpython-39.pyc
 GNNVPR/__pycache__/PyTorchGeometricTrain.cpython-38.pyc
 GNNVPR/__pycache__/PyTorchGeometricTrain.cpython-39.pyc
+GNNVPR/training/__pycache__/parse.cpython-38.pyc
+GNNVPR/training/__pycache__/PyTorchGeometricTrain.cpython-38.pyc
