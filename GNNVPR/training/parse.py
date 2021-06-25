@@ -25,6 +25,9 @@ FIRST_LAST_PARSE_STRING = r'''([0-9A-Za-z]+)_
                                 (?:(first)_([0-9A-Za-z\.]+)|([0-9A-Za-z\.]+))_
                                 ([0-9A-Za-z]+).csv'''
 CSV_FILE_STRING = r"([0-9A-Za-z]+).csv"
+CSV_FILE_STRING_NODE = r"([0-9A-Za-z]+)_nodes.csv"
+CSV_FILE_STRING_EDGES = r"([0-9A-Za-z]+)_edges.csv"
+
 CACHE_CUTOFF = 28000
 
 
@@ -108,8 +111,36 @@ def FindSpecificFiles(directory, extension):
 
 # @lru_cache(maxsize=32)
 
+def parse_edge_features(f):
+    """[summary]
 
-def parse_one_first_last_csv(f):
+    [extended_summary]
+
+    Parameters
+    ----------
+    f : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    with open(f) as cF:
+        start_time = time.time()
+        df = pd.read_csv(f)
+        print("--- Converting Edge CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
+        edge_index = [[], []]
+        
+        
+        edge_index[0] = df['src_node'].values
+        edge_index[1] = df['sink_node'].values
+        print(len(edge_index[0]))
+        
+    return torch.tensor(edge_index, dtype=torch.long)
+
+
+def parse_node_features(f):
     """[summary]
 
     [extended_summary]
@@ -124,26 +155,21 @@ def parse_one_first_last_csv(f):
     [type]
         [description]
     """    
-    match = re.search(CSV_FILE_STRING, f)
-    if not match:
-        return None
-    match.group(1)
+    # match = re.search(CSV_FILE_STRING, f)
+    # if not match:
+    #     return None
+    # match.group(1)
     # graph = PyTorchGeometricTrain.TrainGraph(benchName)
-    start_time = time.time()
+    
     with open(f) as cF:
-        reader = csv.DictReader(cF)
-        edge_index = [[], []]
-        # lines = [row for row in reader]
-        df = pd.DataFrame(data=reader)
-        raw_dest_edges = df['dest_edges']
-        for idx, row in raw_dest_edges.iteritems():
-            dest_edges = list((map(int, set(
-                                ast.literal_eval(row)))))
-            src_edges = [idx] * len(dest_edges)
-            edge_index[0] += src_edges
-            edge_index[1] += dest_edges
+        start_time = time.time()
+             
+        df = pd.read_csv(cF)
+        # Grab from a separate CSV
+        print("--- Converting Node CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
+        start_time = time.time()
+        # Parse Node Features
         df = df.drop(['node_id'], axis=1)
-        df = df.drop(['dest_edges'], axis=1)
 
         one_hot = pd.get_dummies(df['node_type'])
         df = df.drop(['node_type'], axis=1)
@@ -159,67 +185,14 @@ def parse_one_first_last_csv(f):
         # df = (df-df.min())/(df.max()-df.min())
         # x = np.nan_to_num(df.values)
         x = df.values
+        print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))
+
         
-        print(df.head())
-        # x = []
-        # y = []
-
-        # edge_index_cached = [[[], []]]
-        # cache_tracker = 0
-
-        # Old Version
-        # try:
-        #     for row_dict in iter(lines):
-        #         # graph.NodeFromDict(row)
-        #         node_id = int(row_dict["node_id"])
-        #         # dest_edges = [int(dest) for dest in ast.literal_eval(
-        #         #     row_dict["dest_edges"])]
-        #         # src_edges = [node_id for edge in dest_edges]
-        #         dest_edges = list((map(int, set(
-        #                         ast.literal_eval(row_dict["dest_edges"])))))
-        #         src_edges = [node_id] * len(dest_edges)
-        #         # edge_index[0] = edge_index[0] + src_edges
-        #         # edge_index[1] = edge_index[1] + dest_edges
-        #         if len(edge_index_cached[cache_tracker][0]) >= CACHE_CUTOFF:
-        #             cache_tracker += 1
-        #             edge_index_cached.append([[], []])
-        #         edge_index_cached[cache_tracker][0] += src_edges
-        #         edge_index_cached[cache_tracker][1] += dest_edges
-        #         # k.append([float(row_dict["node_type"])])
-                
-        #         a = float(row_dict["capacity"])
-        #         # Do Some Sklearn magic.
-        #         b = int(row_dict["node_type"])
-        #         c = float(row_dict["initial_cost"])
-        #         g = float(row_dict["src_node"])
-        #         e = float(row_dict["sink_node"])
-        #         f = float(row_dict["in_netlist"])
-
-        #         b_one = OneHotEncoder(handle_unknown='ignore')
-        #         b_one.fit([[0], [1], [2], [3], [4], [5]])
-        #         b = b_one.transform([[b]]).toarray()
-              
-        #         d = list(b[0])
-        #         d.append(c)
-        #         d.append(a)
-        #         d.append(g)
-        #         d.append(e)
-        #         d.append(f)
-        #         # Extend not append because one-hot is different.
-        #         x.append(d)
-                
-        #         y.append([float(row_dict["history_cost"])])
-                
-        #     for cache in edge_index_cached:
-        #         edge_index[0] += cache[0]
-        #         edge_index[1] += cache[1]
-        # except KeyError:
-        #     print("KeyError on row: ", row_dict)
-        #     exit(1)
-    print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
+        
+    # print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
     return torch.tensor(x, dtype=torch.float),\
-        torch.tensor(y, dtype=torch.float),\
-        torch.tensor(edge_index, dtype=torch.long)
+        torch.tensor(y, dtype=torch.float)
+
 
 
 def parse_one_first_last_csv_old(f):

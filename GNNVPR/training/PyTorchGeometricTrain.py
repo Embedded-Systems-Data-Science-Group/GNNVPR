@@ -7,6 +7,7 @@ import ast
 import itertools
 from optparse import OptionParser
 import os
+import glob
 import torch
 import torch.nn.functional as F
 import torch_geometric.nn.conv
@@ -275,7 +276,7 @@ class GNNDataset(Dataset):
 
     def __init__(self, root, inDir, outDir, transform=None,
                  pre_transform=None, dataExtensions=".csv"):
-        print("Called init")
+        # print("Called init")
         self.dataDir = inDir
         self.outDir = outDir
         self.dataExtensions = dataExtensions
@@ -292,7 +293,7 @@ class GNNDataset(Dataset):
     def processed_file_names(self):
         # print("Called processed_file_names")
         return ['GNN_Processed_Data_{}.pt'.format(i) for i in
-                range(len(self.raw_paths))]
+                range(int(len(self.raw_paths)/2))]
 
     def download(self):
         print("Called download")
@@ -300,18 +301,25 @@ class GNNDataset(Dataset):
     def process(self):
         print("Called process")
         data_list = list()
-        for num, raw_path in zip(range(len(self.raw_paths)), self.raw_paths):
-            print("processing... ", raw_path)
+        num = 0
+        for node_path in glob.glob(os.path.join(self.dataDir, "*-nodes.csv")):
+           
+            # print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            x, y, edge_index = parse.parse_one_first_last_csv(raw_path)
+            x, y = parse.parse_node_features(node_path)
+            
+            edge_path = node_path.partition("-")[0]+"-edges.csv"
+            
+            edge_index = parse.parse_edge_features(edge_path)
             data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
-        
+
             # data, slices = self.collate(data_list)
+            print(self.processed_paths[num])
             torch.save(data, os.path.join(self.processed_paths[num]))
-                       
-        print(self.raw_paths)
+            num += 1
+        # print(self.raw_paths)
         
     def len(self):
         return len(self.processed_file_names)
@@ -489,7 +497,7 @@ def main(options):
     test_dataset = dataset[one_tenth_length * 9:]
     len(train_dataset), len(val_dataset), len(test_dataset)
 
-    batch_size = 1
+    batch_size = 4
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -501,7 +509,8 @@ def main(options):
     # device = torch.device("cpu")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GraNNy_ViPeR().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, 
+                                 weight_decay=5e-4)
 
     for epoch in range(1, 200):
         loss = train()
