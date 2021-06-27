@@ -131,11 +131,10 @@ def parse_edge_features(f):
         df = pd.read_csv(f)
         print("--- Converting Edge CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
         edge_index = [[], []]
-        
-        
+        start_time = time.time()   
         edge_index[0] = df['src_node'].values
         edge_index[1] = df['sink_node'].values
-        print(len(edge_index[0]))
+        print("--- Handling Edges took %s seconds ---" % (time.time() - start_time))
         
     return torch.tensor(edge_index, dtype=torch.long)
 

@@ -9,6 +9,7 @@ from optparse import OptionParser
 import os
 import glob
 import torch
+import gc
 import torch.nn.functional as F
 import torch_geometric.nn.conv
 from sklearn.metrics import mean_absolute_error
@@ -279,6 +280,7 @@ class GNNDataset(Dataset):
         # print("Called init")
         self.dataDir = inDir
         self.outDir = outDir
+        self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes.csv")))
         self.dataExtensions = dataExtensions
         super(GNNDataset, self).__init__(root, transform, pre_transform)
         # self.data, self.slices = torch.load(self.processed_paths[0])
@@ -293,7 +295,7 @@ class GNNDataset(Dataset):
     def processed_file_names(self):
         # print("Called processed_file_names")
         return ['GNN_Processed_Data_{}.pt'.format(i) for i in
-                range(int(len(self.raw_paths)/2))]
+                range(self.length)]
 
     def download(self):
         print("Called download")
@@ -302,7 +304,7 @@ class GNNDataset(Dataset):
         print("Called process")
         data_list = list()
         num = 0
-        for node_path in glob.glob(os.path.join(self.dataDir, "*-nodes.csv")):
+        for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes.csv")):
            
             # print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
@@ -316,9 +318,14 @@ class GNNDataset(Dataset):
             data_list.append(data)
 
             # data, slices = self.collate(data_list)
-            print(self.processed_paths[num])
+            # print(self.processed_paths[num])
             torch.save(data, os.path.join(self.processed_paths[num]))
             num += 1
+            del data
+            del x
+            del y
+            del edge_index
+            gc.collect()
         # print(self.raw_paths)
         
     def len(self):
@@ -509,7 +516,7 @@ def main(options):
     # device = torch.device("cpu")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GraNNy_ViPeR().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, 
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
 
     for epoch in range(1, 200):
