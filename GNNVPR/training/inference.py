@@ -7,6 +7,7 @@ import torch
 import glob
 import time
 import os
+import numpy as np
 import math
 import shutil
 from shutil import copyfile
@@ -48,11 +49,12 @@ def main(options):
         df = pd.DataFrame.from_dict(pred)
         # print("honkers")
         # df = (df-df.min())/(df.max() - df.min())
-        # df = df * 8
+       
         # def sigmoid(x):
         #     return 1 / (1.0 + math.exp(-x))
         # df = df.apply(sigmoid, axis=1)
-        df = df*4
+        df = (0.5 + df) ** 5
+        # df = df * 4
         # print(df)
         # print("Saving file to: ", os.getcwd())
         df.to_csv('prediction.csv', index=False,

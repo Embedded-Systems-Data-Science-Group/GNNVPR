@@ -420,6 +420,13 @@ class GraNNy_ViPeR(torch.nn.Module):
         x1 = self.conv1(x, edge_index)
         # Sigmoid Here
         x1 = self.sig1a(x1)
+        x1 = self.conv1(x, edge_index)
+        # Sigmoid Here
+        x1 = self.sig1a(x1)
+        x1 = self.conv1(x, edge_index)
+        # Sigmoid Here
+        x1 = self.sig1a(x1)
+        
         x1 = self.conv2(x1, edge_index)
         # Sigmoid Here
         x1 = self.sig1b(x1)
@@ -442,6 +449,8 @@ class GraNNy_ViPeR(torch.nn.Module):
         
         x = torch.cat((x1, x2, x3), dim=1)
         x = F.relu(self.lin1(x))
+        # x = torch.exp(x)
+        # x = (0.5 * x) ** 4
         # x = self.sig4(self.lin1(x))
         # x = torch.nn.functional.normalize(x)
         # x = x/x.sum(0).expand_as(x) 
@@ -533,7 +542,7 @@ def main(options):
                                                               train_loss,
                                                               val_loss,
                                                               test_loss))
-    torch.save(model.state_dict(), "model.pt")
+            torch.save(model.state_dict(), "model.pt")
 
     return
 
