@@ -15,7 +15,7 @@ import torch_geometric.nn.conv
 from sklearn.metrics import mean_absolute_error
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
 from torch_geometric.data import Data, DataLoader, Dataset
-
+from torch.cuda.amp import autocast, GradScaler
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, remove_self_loops
 import parse
@@ -469,17 +469,25 @@ def main(options):
         for data in train_loader:
             data = data.to(device)
             optimizer.zero_grad()
-            output = model(data)
+            with autocast(enabled=True):
+                
+                output = model(data)
 
-            target = data.y.to(device)
+                target = data.y.to(device)
             # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
             # target)
-            loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+                loss = torch.nn.MSELoss()(output.to(torch.float32), target)
             # loss = torch.nn.MSELoss(reduce=True)(output.to(torch.float32),
             # target)
-            loss.backward()
-            loss_all += data.num_graphs * loss.item()
-            optimizer.step()
+            if True:
+                scalar.scale(loss).backward()
+                scalar.step(optimizer)
+                loss_all += data.num_graphs * loss.item()
+                scalar.update()
+            else:
+                loss.backward()
+                loss_all += data.num_graphs * loss.item()
+                optimizer.step()
                                   
         return loss_all / len(train_dataset)
 
@@ -491,12 +499,13 @@ def main(options):
         with torch.no_grad():
             for data in loader:
                 data = data.to(device)
-                pred = model(data).detach().cpu().numpy()
+                with autocast(enabled=True):
+                    pred = model(data).detach().cpu().numpy()
 
-                target = data.y.detach().cpu().numpy()
+                    target = data.y.detach().cpu().numpy()
                 # predictions.append(pred)
                 # targets.append(target)
-                maes.append(mean_absolute_error(target, pred))               
+                    maes.append(mean_absolute_error(target, pred))               
 
         # predictions = np.hstack(predictions)
         # targets = np.hstack(targets)
@@ -527,7 +536,7 @@ def main(options):
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
-
+    scalar = GradScaler()
     for epoch in range(1, 200):
         loss = train()
         train_loss = evaluate(train_loader)
