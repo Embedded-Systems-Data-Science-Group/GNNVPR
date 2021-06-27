@@ -20,26 +20,26 @@ arch_dir2=${arch[-2]}
 #     printf "$a\n"
 # done
 # EARCH MCNC
-echo "Running EARCH MCNC"
-for arch_dir in "$arch_dir2";
-do
-    for b in $MCNC;
-    do  
-        IFS="/." read -a bench <<< "$b"
-        curdir=$arch_dir"_"${bench[-2]}
-        mkdir -p $curdir
-        mkdir -p $curdir/inference/
-        mkdir -p $curdir/inference/processed/
-        mkdir -p $curdir/inference/raw/
-        mkdir -p $curdir/inference/combined/
-        # echo $b
-        # echo "$INITIAL $EARCH $b $ARGS "
-        cd $curdir
-        eval "$INITIAL $EARCH $b $ARGSR "
-        cd /mnt/e/benchmarks/Outputs/
+# echo "Running EARCH MCNC"
+# for arch_dir in "$arch_dir2";
+# do
+#     for b in $MCNC;
+#     do  
+#         IFS="/." read -a bench <<< "$b"
+#         curdir=$arch_dir"_"${bench[-2]}
+#         mkdir -p $curdir
+#         mkdir -p $curdir/inference/
+#         mkdir -p $curdir/inference/processed/
+#         mkdir -p $curdir/inference/raw/
+#         mkdir -p $curdir/inference/combined/
+#         # echo $b
+#         # echo "$INITIAL $EARCH $b $ARGS "
+#         cd $curdir
+#         eval "$INITIAL $EARCH $b $ARGSR "
+#         cd /mnt/e/benchmarks/Outputs/
 
-    done
-done
+#     done
+# done
 
 # echo "Running STRATXIV MCNC"
 # for arch_dir in "$arch_dir1";
@@ -77,32 +77,38 @@ done
 #         # echo $b
 #         # echo "$INITIAL $EARCH $b $ARGS "
 #         cd $curdir
+#         _mydir="$(pwd)"
+#         rm "$_mydir"/inference/*.csv
+#         rm "$_mydir"/inference/raw/*.csv
 #         eval "$INITIAL $EARCH $b $ARGS "
 #         cd /mnt/e/benchmarks/Outputs/
 
 #     done
 # done
 
-# echo "Running STRATXIV MCNC"
-# for arch_dir in "$arch_dir1";
-# do
-#     for b in $MCNC;
-#     do  
-#         IFS="/." read -a bench <<< "$b"
-#         curdir=$arch_dir"_"${bench[-2]}
-#         mkdir -p $curdir
-#         mkdir -p $curdir/inference/
-#         mkdir -p $curdir/inference/processed/
-#         mkdir -p $curdir/inference/raw/
-#         mkdir -p $curdir/inference/combined/
-#         # echo $b
-#         # echo "$INITIAL $EARCH $b $ARGS "
-#         cd $curdir
-#         eval "$INITIAL $STRATXIV $b $ARGS "
-#         cd /mnt/e/benchmarks/Outputs/
+echo "Running STRATXIV MCNC"
+for arch_dir in "$arch_dir1";
+do
+    for b in $MCNC;
+    do  
+        IFS="/." read -a bench <<< "$b"
+        curdir=$arch_dir"_"${bench[-2]}
+        mkdir -p $curdir
+        mkdir -p $curdir/inference/
+        mkdir -p $curdir/inference/processed/
+        mkdir -p $curdir/inference/raw/
+        mkdir -p $curdir/inference/combined/
+        # echo $b
+        # echo "$INITIAL $EARCH $b $ARGS "
+        cd $curdir
+        _mydir="$(pwd)"
+        rm "$_mydir"/inference/*.csv
+        rm "$_mydir"/inference/raw/*.csv
+        eval "$INITIAL $STRATXIV $b $ARGS "
+        cd /mnt/e/benchmarks/Outputs/
 
-#     done
-# done
+    done
+done
 
 # echo "Running STRATXIV TITANJR"
 # for arch_dir in "$arch_dir1";
