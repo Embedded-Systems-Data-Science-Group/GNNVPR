@@ -111,6 +111,7 @@ def FindSpecificFiles(directory, extension):
 
 # @lru_cache(maxsize=32)
 
+
 def parse_edge_features(f):
     """[summary]
 
@@ -139,7 +140,7 @@ def parse_edge_features(f):
     return torch.tensor(edge_index, dtype=torch.long)
 
 
-def parse_node_features(f):
+def parse_node_features(f, g):
     """[summary]
 
     [extended_summary]
@@ -159,14 +160,11 @@ def parse_node_features(f):
     #     return None
     # match.group(1)
     # graph = PyTorchGeometricTrain.TrainGraph(benchName)
-    
+    start_time = time.time()
+    # Features
     with open(f) as cF:
-        start_time = time.time()
-             
         df = pd.read_csv(cF)
         # Grab from a separate CSV
-        print("--- Converting Node CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
-        start_time = time.time()
         # Parse Node Features
         df = df.drop(['node_id'], axis=1)
 
@@ -175,19 +173,19 @@ def parse_node_features(f):
         df = df.join(one_hot)
         # ! We hate these features. DELETE THEM
         df = df.drop(['src_node', 'sink_node'], axis=1)
-
+        
         df = df.apply(pd.to_numeric)
-
-        y = list(df['history_cost'].values)
-        y = [[i] for i in y]
-        df = df.drop(['history_cost'], axis=1)
         # df = (df-df.min())/(df.max()-df.min())
         # x = np.nan_to_num(df.values)
         x = df.values
-        print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))
-
-        
-        
+    # Target
+    with open(g) as cG:
+        df = pd.read_csv(cG)
+        df['history_cost'] = df['history_cost'] - 1
+        y = list(df['history_cost'].values)
+        y = [[i] for i in y]
+        # df = [df.in_netlist == 1]
+    print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))   
     # print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
     return torch.tensor(x, dtype=torch.float),\
         torch.tensor(y, dtype=torch.float)

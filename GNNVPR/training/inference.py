@@ -53,7 +53,13 @@ def main(options):
         # def sigmoid(x):
         #     return 1 / (1.0 + math.exp(-x))
         # df = df.apply(sigmoid, axis=1)
-        df = (0.5 + df) ** 5
+        # df = ((df+0.5) ** 4)
+        # df = (df * 15) ** 2
+        # df = df * 20
+        df = df + 1
+        # df = df + 1
+        # print(df.head())
+        # df = df.apply(np.floor)
         # df = df * 4
         # print(df)
         # print("Saving file to: ", os.getcwd())

@@ -10,9 +10,12 @@ import os
 import glob
 import torch
 import gc
+import time
+# import 
 import torch.nn.functional as F
 import torch_geometric.nn.conv
 from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import r2_score
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
 from torch_geometric.data import Data, DataLoader, Dataset
 from torch.cuda.amp import autocast, GradScaler
@@ -280,7 +283,7 @@ class GNNDataset(Dataset):
         # print("Called init")
         self.dataDir = inDir
         self.outDir = outDir
-        self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes.csv")))
+        self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes*.csv")))
         self.dataExtensions = dataExtensions
         super(GNNDataset, self).__init__(root, transform, pre_transform)
         # self.data, self.slices = torch.load(self.processed_paths[0])
@@ -304,21 +307,20 @@ class GNNDataset(Dataset):
         print("Called process")
         data_list = list()
         num = 0
-        for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes.csv")):
-           
+        for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes*.csv")):
+            iteration = node_path.partition("-nodes")
+            target_path = node_path.partition("-")[0]+"-hcost.csv"
             # print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            x, y = parse.parse_node_features(node_path)
-            
-            edge_path = node_path.partition("-")[0]+"-edges.csv"
-            
+            x, y = parse.parse_node_features(node_path, target_path)
+
+            edge_path = node_path.partition("-")[0]+"-edges"+iteration[2]
             edge_index = parse.parse_edge_features(edge_path)
             data = Data(x=x, y=y, edge_index=edge_index)
             data_list.append(data)
 
             # data, slices = self.collate(data_list)
-            # print(self.processed_paths[num])
             torch.save(data, os.path.join(self.processed_paths[num]))
             num += 1
             del data
@@ -386,7 +388,6 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
         self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8)
         self.Tconv2a = torch_geometric.nn.conv.TAGConv(8, 1)
-        
         self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8,
                                                        K=6)
         self.Tconv2b = torch_geometric.nn.conv.TAGConv(8, 1, K=6)
@@ -448,7 +449,9 @@ class GraNNy_ViPeR(torch.nn.Module):
         # x2 = F.relu(self.lin2(x2))
         
         x = torch.cat((x1, x2, x3), dim=1)
-        x = F.relu(self.lin1(x))
+        x = self.lin1(x)
+        x = F.relu(x)
+        x = x * 20
         # x = torch.exp(x)
         # x = (0.5 * x) ** 4
         # x = self.sig4(self.lin1(x))
@@ -460,6 +463,9 @@ class GraNNy_ViPeR(torch.nn.Module):
         return x
 
 
+use_FP16 = False
+
+
 def main(options):
 
     def train():
@@ -469,22 +475,22 @@ def main(options):
         for data in train_loader:
             data = data.to(device)
             optimizer.zero_grad()
-            with autocast(enabled=True):
-                
+            with autocast(enabled=use_FP16):
+                    
                 output = model(data)
 
                 target = data.y.to(device)
-            # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
-            # target)
-                loss = torch.nn.MSELoss()(output.to(torch.float32), target)
-            # loss = torch.nn.MSELoss(reduce=True)(output.to(torch.float32),
-            # target)
-            if True:
+    
+    # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
+    # target)
+            # loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
+            loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+            if not use_FP16:
                 scalar.scale(loss).backward()
                 scalar.step(optimizer)
                 loss_all += data.num_graphs * loss.item()
                 scalar.update()
-            else:
+            if use_FP16:
                 loss.backward()
                 loss_all += data.num_graphs * loss.item()
                 optimizer.step()
@@ -499,12 +505,12 @@ def main(options):
         with torch.no_grad():
             for data in loader:
                 data = data.to(device)
-                with autocast(enabled=True):
+                with autocast(enabled=use_FP16):
                     pred = model(data).detach().cpu().numpy()
-
                     target = data.y.detach().cpu().numpy()
                 # predictions.append(pred)
                 # targets.append(target)
+                    #  loss = torch.nn.MSELoss
                     maes.append(mean_absolute_error(target, pred))               
 
         # predictions = np.hstack(predictions)
@@ -537,6 +543,7 @@ def main(options):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
     scalar = GradScaler()
+    initial = time.perf_counter()
     for epoch in range(1, 200):
         loss = train()
         train_loss = evaluate(train_loader)
@@ -544,13 +551,15 @@ def main(options):
         val_loss = evaluate(val_loader)
         
         test_loss = evaluate(test_loader)
-        
+        run = time.perf_counter() - initial
         if (epoch % 10 == 0) or epoch == 1:
             print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
-                  'Val MAE: {:.5f}, Test MAE: {:.5f}').format(epoch, loss,
-                                                              train_loss,
-                                                              val_loss,
-                                                              test_loss))
+                   'Val MAE: {:.5f}, Test MAE: {:.5f},' +
+                   'Time: {:.2f}').format(epoch, loss,
+                                          train_loss,
+                                          val_loss,
+                                          test_loss,
+                                          run))
             torch.save(model.state_dict(), "model.pt")
 
     return
