@@ -56,6 +56,7 @@ def main(options):
         # df = ((df+0.5) ** 4)
         # df = (df * 15) ** 2
         # df = df * 20
+        df = df * 4
         df = df + 1
         # df = df + 1
         # print(df.head())

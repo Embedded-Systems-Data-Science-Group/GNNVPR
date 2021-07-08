@@ -24,7 +24,8 @@ from torch_geometric.utils import add_self_loops, remove_self_loops
 import parse
 
 embed_dim = 128
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 
 class TrainNodes:
     def __init__(self,
@@ -383,20 +384,33 @@ class GraNNy_ViPeR(torch.nn.Module):
         super(GraNNy_ViPeR, self).__init__()
         self.NUM_FEATURES = 11
         # self.conv1 = SAGEConv(1, 128)
-        self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, 128)
-        self.conv2 = torch_geometric.nn.conv.SAGEConv(128, 128)
-        self.conv3 = torch_geometric.nn.conv.SAGEConv(128, 1)
-        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8)
-        self.Tconv2a = torch_geometric.nn.conv.TAGConv(8, 1)
-        self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, 8,
+        
+        L_1 = 32
+        # SAGEConv
+        self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_1)
+        self.conv2 = torch_geometric.nn.conv.SAGEConv(L_1, L_1)
+        self.conv3 = torch_geometric.nn.conv.SAGEConv(L_1, 1)
+        
+        # GCN Conv
+        self.gconv1 = torch_geometric.nn.conv.GCNConv(self.NUM_FEATURES, L_1)
+        self.gconv1b = torch_geometric.nn.conv.GCNConv(L_1, L_1)
+        self.gconv2 = torch_geometric.nn.conv.GCNConv(L_1, 1)
+        
+        # TAG Conv
+        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
+        torch_geometric.nn
+        self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
+        self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1,
                                                        K=6)
-        self.Tconv2b = torch_geometric.nn.conv.TAGConv(8, 1, K=6)
+        self.Tconv2b = torch_geometric.nn.conv.TAGConv(L_1, 1, K=6)
+        
+    
         # self.pool1 = TopKPooling(128, ratio=0.8)
         # self.pool2 = TopKPooling(128, ratio=0.8)
         # self.pool3 = TopKPooling(128, ratio=0.8)
         # self.item_embedding = torch.nn.Embedding(num_embeddings=7,
         # embedding_dim=embed_dim)
-        self.lin1 = torch.nn.Linear(3, 1)
+        self.lin1 = torch.nn.Linear(4, 1)
         # self.lin2 = torch.nn.Linear(2, 1)
         self.sig1a = torch.nn.Sigmoid()
         self.sig1b = torch.nn.Sigmoid()
@@ -414,16 +428,10 @@ class GraNNy_ViPeR(torch.nn.Module):
         self.act2 = torch.nn.ReLU()
 
     def forward(self, data):
-        x, edge_index,  = data.x, data.edge_index
+        x, edge_index = data.x, data.edge_index
         # x = x.squeeze(1)
         # batch = data.batch
         # * Layer 1
-        x1 = self.conv1(x, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1a(x1)
-        x1 = self.conv1(x, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1a(x1)
         x1 = self.conv1(x, edge_index)
         # Sigmoid Here
         x1 = self.sig1a(x1)
@@ -432,7 +440,16 @@ class GraNNy_ViPeR(torch.nn.Module):
         # Sigmoid Here
         x1 = self.sig1b(x1)
         x1 = F.relu(self.conv3(x1, edge_index))
-        
+        # * GCN Layer
+        x1b = self.gconv1(x, edge_index)
+        x1b = self.sig1b(x1b)
+        x1b = self.gconv1b(x1b, edge_index)
+        x1b = self.sig1b(x1b)
+        x1b = self.gconv2(x1b, edge_index)
+        x1b = F.relu(x1b)
+    
+        # x1 = torch.cat((x1, x1b), dim=1)
+        # x1 = x1b
         # * Layer 2
         x2 = self.Tconv1a(x, edge_index)
         # Sigmoid Here
@@ -448,10 +465,17 @@ class GraNNy_ViPeR(torch.nn.Module):
         # x2 = torch.cat((x2, x3), dim=1)
         # x2 = F.relu(self.lin2(x2))
         
-        x = torch.cat((x1, x2, x3), dim=1)
+        x = torch.cat((x1, x1b, x2, x3), dim=1)
+        # x = torch.cat((x1, x1b, x2, x3), dim=1)
+
         x = self.lin1(x)
         x = F.relu(x)
-        x = x * 20
+        indices = torch.randperm(len(x))[:int(len(x)*.99)]
+        # x_1 = torch.where(data.y[indices] == float(0), x[indices].float(), float(0))
+        zeros = torch.zeros(len(x[indices]), 1).to(device)
+        x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
+       
+
         # x = torch.exp(x)
         # x = (0.5 * x) ** 4
         # x = self.sig4(self.lin1(x))
@@ -460,6 +484,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         # x = x*4
 
         # x = F.dropout(x, p=0.5, training=self.training)
+        
         return x
 
 
@@ -528,7 +553,7 @@ def main(options):
     test_dataset = dataset[one_tenth_length * 9:]
     len(train_dataset), len(val_dataset), len(test_dataset)
 
-    batch_size = 4
+    batch_size = 2
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -538,7 +563,7 @@ def main(options):
     # num_items, num_categories
 
     # device = torch.device("cpu")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
