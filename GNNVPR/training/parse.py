@@ -11,7 +11,7 @@ import time
 import re
 from sklearn.preprocessing import OneHotEncoder
 from functools import lru_cache
-# import networkx as nx
+import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
 
@@ -29,6 +29,15 @@ CSV_FILE_STRING_NODE = r"([0-9A-Za-z]+)_nodes.csv"
 CSV_FILE_STRING_EDGES = r"([0-9A-Za-z]+)_edges.csv"
 
 CACHE_CUTOFF = 28000
+# Takes in a data class, converts to networkx, adds feature, converts back
+
+
+def add_khops_feature(graph):
+    #  We want to add a feature to each node that represents the distance
+    #  to the nearest node that is in the netlist.
+    # print(graph[1])
+    print(list(graph.nodes(data=True)))
+    return graph
 
 
 def parse_first_last_files(directory, outputDirectory):
@@ -130,16 +139,17 @@ def parse_edge_features(f):
     with open(f) as cF:
         start_time = time.time()
         df = pd.read_csv(f)
-        print("--- Converting Edge CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
+        # print("--- Converting Edge CSV to Dataframe took %s seconds ---" % (time.time() - start_time))
         edge_index = [[], []]
         start_time = time.time()   
         edge_index[0] = df['src_node'].values
         edge_index[1] = df['sink_node'].values
-        print("--- Handling Edges took %s seconds ---" % (time.time() - start_time))
+        # print("--- Handling Edges took %s seconds ---" % (time.time() - start_time))
         
     return torch.tensor(edge_index, dtype=torch.long)
 
 
+    
 def parse_node_features(f, g):
     """[summary]
 
@@ -173,11 +183,11 @@ def parse_node_features(f, g):
         df = df.join(one_hot)
         # ! We hate these features. DELETE THEM
         df = df.drop(['src_node', 'sink_node'], axis=1)
-        
         df = df.apply(pd.to_numeric)
         # df = (df-df.min())/(df.max()-df.min())
         # x = np.nan_to_num(df.values)
         x = df.values
+        in_netlist = df['in_netlist']
     # Target
     with open(g) as cG:
         df = pd.read_csv(cG)
@@ -185,10 +195,10 @@ def parse_node_features(f, g):
         y = list(df['history_cost'].values)
         y = [[i] for i in y]
         # df = [df.in_netlist == 1]
-    print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))   
+    # print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))   
     # print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
     return torch.tensor(x, dtype=torch.float),\
-        torch.tensor(y, dtype=torch.float)
+        torch.tensor(y, dtype=torch.float), in_netlist
 
 
 

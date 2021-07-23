@@ -20,8 +20,8 @@ embed_dim = 128
 # from PyTorchGeometricTrain import GNNDataset
 
 def main(options):
-    device = "cpu"
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     t1 = time.time()
     proc_dir = options.inputDirectory+"processed/"
     for file in glob.glob(os.path.join(proc_dir, "*.pt")):
@@ -43,29 +43,17 @@ def main(options):
     t3 = time.time()
     test_loader = DataLoader(dataset, batch_size=1)
     for data in test_loader:
+        t5 = time.time()
         data = data.to(device)
         pred = model(data).detach().cpu().numpy()
-        # print(pred)
+        print("--- Direct Model Inference took %s seconds ---" % (time.time() - t5))
+        # * Measure time for this. 
+        # * Save directly to csv?
         df = pd.DataFrame.from_dict(pred)
-        # print("honkers")
-        # df = (df-df.min())/(df.max() - df.min())
-       
-        # def sigmoid(x):
-        #     return 1 / (1.0 + math.exp(-x))
-        # df = df.apply(sigmoid, axis=1)
-        # df = ((df+0.5) ** 4)
-        # df = (df * 15) ** 2
-        # df = df * 20
         df = df * 4
-        df = df + 1
         # df = df + 1
-        # print(df.head())
-        # df = df.apply(np.floor)
-        # df = df * 4
-        # print(df)
-        # print("Saving file to: ", os.getcwd())
         df.to_csv('prediction.csv', index=False,
-                  header=False)
+                    header=False)
     print("--- Prediction & Saving took %s seconds ---" % (time.time() - t3))
 
 if __name__ == "__main__":

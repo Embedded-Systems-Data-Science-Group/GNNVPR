@@ -10,14 +10,19 @@ import os
 import glob
 import torch
 import gc
+import networkx as nx
 import time
 # import 
 import torch.nn.functional as F
+import torch_geometric.nn.pool
 import torch_geometric.nn.conv
+import torch_geometric.nn.dense
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import r2_score
+from torch_geometric.utils.convert import to_networkx, from_networkx
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
 from torch_geometric.data import Data, DataLoader, Dataset
+from torch_geometric.transforms import ToSparseTensor
 from torch.cuda.amp import autocast, GradScaler
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import add_self_loops, remove_self_loops
@@ -25,7 +30,7 @@ import parse
 
 embed_dim = 128
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = "cpu"
+# device = "cpu"
 
 class TrainNodes:
     def __init__(self,
@@ -314,11 +319,15 @@ class GNNDataset(Dataset):
             # print("processing... ", raw_path)
             # graph = parse.parse_one_first_last_csv(raw_path)
             # inputDict = graph.ToDataDict()
-            x, y = parse.parse_node_features(node_path, target_path)
-
-            edge_path = node_path.partition("-")[0]+"-edges"+iteration[2]
+            x, y, in_netlist = parse.parse_node_features(node_path, target_path)
+            edge_path = node_path.partition("-")[0]+"-edges.csv"
             edge_index = parse.parse_edge_features(edge_path)
             data = Data(x=x, y=y, edge_index=edge_index)
+            # in_netlist = list(in_netlist)
+            # ng = to_networkx(data, node_attrs=in_netlist)
+            # khops_ret = parse.add_khops_feature(ng)
+            # data = from_networkx(khops_ret)
+            
             data_list.append(data)
 
             # data, slices = self.collate(data_list)
@@ -329,7 +338,7 @@ class GNNDataset(Dataset):
             del y
             del edge_index
             gc.collect()
-        # print(self.raw_paths)
+        print("Finished Processing")
         
     def len(self):
         return len(self.processed_file_names)
@@ -384,77 +393,56 @@ class GraNNy_ViPeR(torch.nn.Module):
         super(GraNNy_ViPeR, self).__init__()
         self.NUM_FEATURES = 11
         # self.conv1 = SAGEConv(1, 128)
-        
-        L_1 = 32
-        # SAGEConv
-        self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_1)
-        self.conv2 = torch_geometric.nn.conv.SAGEConv(L_1, L_1)
-        self.conv3 = torch_geometric.nn.conv.SAGEConv(L_1, 1)
-        
-        # GCN Conv
-        self.gconv1 = torch_geometric.nn.conv.GCNConv(self.NUM_FEATURES, L_1)
-        self.gconv1b = torch_geometric.nn.conv.GCNConv(L_1, L_1)
-        self.gconv2 = torch_geometric.nn.conv.GCNConv(L_1, 1)
+        L_0 = 64
+        L_1 = 8
+        K_1 = 16
+        NUM_RELATIONS = 3
+        # self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_0)
+        # self.conv2 = torch_geometric.nn.conv.SAGEConv(L_0, L_0)
+        # self.conv3 = torch_geometric.nn.conv.SAGEConv(L_0, 1)
         
         # TAG Conv
-        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
-        torch_geometric.nn
-        self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
+        # self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
+        # self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
         self.Tconv1b = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1,
-                                                       K=6)
-        self.Tconv2b = torch_geometric.nn.conv.TAGConv(L_1, 1, K=6)
+                                                       K=K_1)
+        self.Tconv2b = torch_geometric.nn.conv.TAGConv(L_1, 1, K=K_1)
         
-    
-        # self.pool1 = TopKPooling(128, ratio=0.8)
-        # self.pool2 = TopKPooling(128, ratio=0.8)
-        # self.pool3 = TopKPooling(128, ratio=0.8)
-        # self.item_embedding = torch.nn.Embedding(num_embeddings=7,
-        # embedding_dim=embed_dim)
-        self.lin1 = torch.nn.Linear(4, 1)
+        self.lin1 = torch.nn.Linear(1, 1)
         # self.lin2 = torch.nn.Linear(2, 1)
+        
+       
+        
         self.sig1a = torch.nn.Sigmoid()
         self.sig1b = torch.nn.Sigmoid()
-
         self.sig2 = torch.nn.Sigmoid()
         
         self.sig3 = torch.nn.Sigmoid()
         self.sig4 = torch.nn.Sigmoid()
-        # self.lin1 = torch.nn.Linear(256, 128)
-        # self.lin2 = torch.nn.Linear(128, 64)
-        # self.lin3 = torch.nn.Linear(64, 1)
         self.bn1 = torch.nn.BatchNorm1d(128)
         self.bn2 = torch.nn.BatchNorm1d(64)
         self.act1 = torch.nn.ReLU()
         self.act2 = torch.nn.ReLU()
-
+        self.act3 = torch.nn.ReLU()
+ 
     def forward(self, data):
+        # data = torch_geometric.nn.pool.max_pool_neighbor_x(data)
         x, edge_index = data.x, data.edge_index
-        # x = x.squeeze(1)
-        # batch = data.batch
-        # * Layer 1
-        x1 = self.conv1(x, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1a(x1)
-        
-        x1 = self.conv2(x1, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1b(x1)
-        x1 = F.relu(self.conv3(x1, edge_index))
-        # * GCN Layer
-        x1b = self.gconv1(x, edge_index)
-        x1b = self.sig1b(x1b)
-        x1b = self.gconv1b(x1b, edge_index)
-        x1b = self.sig1b(x1b)
-        x1b = self.gconv2(x1b, edge_index)
-        x1b = F.relu(x1b)
-    
-        # x1 = torch.cat((x1, x1b), dim=1)
-        # x1 = x1b
-        # * Layer 2
-        x2 = self.Tconv1a(x, edge_index)
-        # Sigmoid Here
-        x2 = self.sig2(x2)
-        x2 = F.relu((self.Tconv2a(x2, edge_index)))
+       
+        # # # * Layer 1
+        # x1 = self.conv1(x, edge_index)
+        # # Sigmoid Here
+        # x1 = self.sig1a(x1)
+        # x1 = self.conv2(x1, edge_index)
+        # # Sigmoid Here
+        # x1 = self.sig1b(x1)
+        # x1 = F.relu(self.conv3(x1, edge_index))
+  
+        # # * Layer 2
+        # x2 = self.Tconv1a(x, edge_index)
+        # # Sigmoid Here
+        # x2 = self.sig2(x2)
+        # x2 = F.relu((self.Tconv2a(x2, edge_index)))
 
         # * Layer 3
         x3 = self.Tconv1b(x, edge_index)
@@ -462,34 +450,27 @@ class GraNNy_ViPeR(torch.nn.Module):
         x3 = self.sig3(x3)
         x3 = F.relu((self.Tconv2b(x3, edge_index)))
         
-        # x2 = torch.cat((x2, x3), dim=1)
-        # x2 = F.relu(self.lin2(x2))
+        x = x3
+       
         
-        x = torch.cat((x1, x1b, x2, x3), dim=1)
-        # x = torch.cat((x1, x1b, x2, x3), dim=1)
-
+        # x = torch.cat((x2, x3), dim=1)
+        # Pooling
+        
         x = self.lin1(x)
         x = F.relu(x)
-        indices = torch.randperm(len(x))[:int(len(x)*.99)]
-        # x_1 = torch.where(data.y[indices] == float(0), x[indices].float(), float(0))
+        # Label Normalization
+        indices = torch.randperm(len(x))[:int(len(x)*.98)]
         zeros = torch.zeros(len(x[indices]), 1).to(device)
         x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
-       
 
-        # x = torch.exp(x)
-        # x = (0.5 * x) ** 4
-        # x = self.sig4(self.lin1(x))
-        # x = torch.nn.functional.normalize(x)
-        # x = x/x.sum(0).expand_as(x) 
-        # x = x*4
-
-        # x = F.dropout(x, p=0.5, training=self.training)
+        x = F.dropout(x, p=0.5, training=self.training)
         
         return x
 
+        
 
-use_FP16 = False
 
+use_FP16=False
 
 def main(options):
 
@@ -508,8 +489,8 @@ def main(options):
     
     # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
     # target)
-            # loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-            loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+            # loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+            loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
             if not use_FP16:
                 scalar.scale(loss).backward()
                 scalar.step(optimizer)
@@ -553,7 +534,7 @@ def main(options):
     test_dataset = dataset[one_tenth_length * 9:]
     len(train_dataset), len(val_dataset), len(test_dataset)
 
-    batch_size = 2
+    batch_size = 1
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -606,3 +587,4 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
     # calling main function
     main(options)
+
