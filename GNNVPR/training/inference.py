@@ -20,8 +20,8 @@ embed_dim = 128
 # from PyTorchGeometricTrain import GNNDataset
 
 def main(options):
-    # device = "cpu"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
     t1 = time.time()
     proc_dir = options.inputDirectory+"processed/"
     for file in glob.glob(os.path.join(proc_dir, "*.pt")):
@@ -50,8 +50,9 @@ def main(options):
         # * Measure time for this. 
         # * Save directly to csv?
         df = pd.DataFrame.from_dict(pred)
-        df = df * 4
-        # df = df + 1
+        # df = df * 10
+        df = df + 1
+        
         df.to_csv('prediction.csv', index=False,
                     header=False)
     print("--- Prediction & Saving took %s seconds ---" % (time.time() - t3))
