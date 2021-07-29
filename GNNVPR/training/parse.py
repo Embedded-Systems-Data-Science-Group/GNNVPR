@@ -148,8 +148,7 @@ def parse_edge_features(f):
         
     return torch.tensor(edge_index, dtype=torch.long)
 
-
-    
+ 
 def parse_node_features(f, g):
     """[summary]
 
@@ -170,7 +169,6 @@ def parse_node_features(f, g):
     #     return None
     # match.group(1)
     # graph = PyTorchGeometricTrain.TrainGraph(benchName)
-    start_time = time.time()
     # Features
     with open(f) as cF:
         df = pd.read_csv(cF)
@@ -182,23 +180,21 @@ def parse_node_features(f, g):
         df = df.drop(['node_type'], axis=1)
         df = df.join(one_hot)
         # ! We hate these features. DELETE THEM
-        df = df.drop(['src_node', 'sink_node'], axis=1)
         df = df.apply(pd.to_numeric)
         # df = (df-df.min())/(df.max()-df.min())
         # x = np.nan_to_num(df.values)
         x = df.values
-        in_netlist = df['in_netlist']
     # Target
     with open(g) as cG:
         df = pd.read_csv(cG)
-        df['history_cost'] = df['history_cost'] - 1
-        y = list(df['history_cost'].values)
+        df['present_cost'] = df['present_cost'] - 1
+        y = df['present_cost'].values.tolist()
         y = [[i] for i in y]
         # df = [df.in_netlist == 1]
     # print("--- Handling Nodes took %s seconds ---" % (time.time() - start_time))   
     # print("---- Processed in %.2f seconds ----" % (time.time() - start_time))
     return torch.tensor(x, dtype=torch.float),\
-        torch.tensor(y, dtype=torch.float), in_netlist
+        torch.tensor(y, dtype=torch.float)
 
 
 
