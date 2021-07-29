@@ -2,19 +2,21 @@
 # Output Folder
 OUTPUT="/mnt/e/benchmarks/Outputs/"
 # VPR Command
+BASEDIRECTORY="/mnt/e/benchmarks"
 INITIAL="$VTR_ROOT/vpr/vpr"
 # Architectures
-EARCH="/mnt/e/benchmarks/arch/MCNC/EArch.xml"
-STRATXIV="/mnt/e/benchmarks/arch/TITAN/stratixiv_arch.timing.xml"
+EARCH="$BASEDIRECTORY/arch/MCNC/EArch.xml"
+STRATXIV="$BASEDIRECTORY/arch/TITAN/stratixiv_arch.timing.xml"
 # Benchmarks
-TITAN="/mnt/e/benchmarks/blif/TITAN/*.blif"
-MCNC="/mnt/e/benchmarks/blif/MCNC/*.blif"
-TITANJR="/mnt/e/benchmarks/blif/TITANJR/*.blif"
+TITAN="$BASEDIRECTORY/blif/TITAN/*.blif"
+MCNC="$BASEDIRECTORY/blif/MCNC/*.blif"
+TITANJR="$BASEDIRECTORY/blif/TITANJR/*.blif"
 
 # Argument Options
-ARGS="--route_chan_width 300 -j 6 --collect_data on --do_inference on > /dev/null 2>&1"
-ARGS_OUT="--route_chan_width 300 -j 6 --outtake_ground_truth on > /dev/null 2>&1"
-ARGS_IN="--route_chan_width 300 -j 6 --intake_ground_truth on > /dev/null 2>&1"
+# TODO: Refactor to be more modular. 
+ARGS="--route_chan_width 300 -j 6 --collect_data on --gnntype 3 > /dev/null 2>&1"
+ARGS_OUT="--route_chan_width 300 -j 6 --output_final_costs on > /dev/null 2>&1"
+ARGS_IN="--route_chan_width 300 -j 6 --input_initial_costs on > /dev/null 2>&1"
 ARGSN="--route_chan_width 300 -j 6 > /dev/null 2>&1"
 ARGSR="--route_chan_width 300 -j 6 --collect_data on > /dev/null 2>&1"
 
@@ -52,6 +54,6 @@ run_benchmark() {
 
 # 1. Name, 2. Architecture Directory, 3. Benchmarks, 4. Architecture, 5. VTR Arguments
 run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
-run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
-run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGSR"
+# run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
+# run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGSR"
 
