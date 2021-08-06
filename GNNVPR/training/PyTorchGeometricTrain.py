@@ -18,6 +18,7 @@ import torch_geometric.nn.pool
 import torch_geometric.nn.conv
 import torch_geometric.nn.dense
 from sklearn.metrics import mean_absolute_error
+from progress.bar import Bar
 from sklearn.metrics import r2_score
 from torch_geometric.utils.convert import to_networkx, from_networkx
 from torch_geometric.data import Data, DataLoader, InMemoryDataset
@@ -29,8 +30,8 @@ from torch_geometric.utils import add_self_loops, remove_self_loops
 import parse
 
 embed_dim = 128
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = "cpu"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
 
 class TrainNodes:
     def __init__(self,
@@ -311,33 +312,24 @@ class GNNDataset(Dataset):
 
     def process(self):
         print("Called process")
-        data_list = list()
         num = 0
-        for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes*.csv")):
-            iteration = node_path.partition("-nodes")
-            target_path = node_path.partition("-")[0]+"-hcost.csv"
-            # print("processing... ", raw_path)
-            # graph = parse.parse_one_first_last_csv(raw_path)
-            # inputDict = graph.ToDataDict()
-            x, y, in_netlist = parse.parse_node_features(node_path, target_path)
-            edge_path = node_path.partition("-")[0]+"-edges.csv"
-            edge_index = parse.parse_edge_features(edge_path)
-            data = Data(x=x, y=y, edge_index=edge_index)
-            # in_netlist = list(in_netlist)
-            # ng = to_networkx(data, node_attrs=in_netlist)
-            # khops_ret = parse.add_khops_feature(ng)
-            # data = from_networkx(khops_ret)
-            
-            data_list.append(data)
-
-            # data, slices = self.collate(data_list)
-            torch.save(data, os.path.join(self.processed_paths[num]))
-            num += 1
-            del data
-            del x
-            del y
-            del edge_index
-            gc.collect()
+        with Bar("Processing Graphs", max=self.length) as bar:
+            for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes*.csv")):
+                iteration = node_path.partition("-nodes")
+                target_path = node_path.partition("-")[0]+"-hcost.csv"
+                x, y = parse.parse_node_features(node_path, target_path)
+                edge_path = node_path.partition("-")[0]+"-edges.csv"
+                edge_index = parse.parse_edge_features(edge_path)
+                data = Data(x=x, y=y, edge_index=edge_index)
+                # data, slices = self.collate(data_list)
+                torch.save(data, os.path.join(self.processed_paths[num]))
+                num += 1
+                del data
+                del x
+                del y
+                del edge_index
+                gc.collect()
+                bar.next()
         print("Finished Processing")
         
     def len(self):
