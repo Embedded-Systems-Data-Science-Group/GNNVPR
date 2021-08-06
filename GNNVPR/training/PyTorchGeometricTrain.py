@@ -9,7 +9,8 @@ from optparse import OptionParser
 import os
 import glob
 import torch
-import gc
+import tqdm
+from tqdm import *
 import networkx as nx
 import time
 # import 
@@ -18,6 +19,7 @@ import torch_geometric.nn.pool
 import torch_geometric.nn.conv
 import torch_geometric.nn.dense
 from sklearn.metrics import mean_absolute_error
+from multiprocessing import Pool, freeze_support, cpu_count
 from progress.bar import Bar
 from sklearn.metrics import r2_score
 from torch_geometric.utils.convert import to_networkx, from_networkx
@@ -291,6 +293,8 @@ class GNNDataset(Dataset):
         self.dataDir = inDir
         self.outDir = outDir
         self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes*.csv")))
+        self.pathdict = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
+        self.indices = {k: i for i, k in enumerate(self.pathdict)}
         self.dataExtensions = dataExtensions
         super(GNNDataset, self).__init__(root, transform, pre_transform)
         # self.data, self.slices = torch.load(self.processed_paths[0])
@@ -309,27 +313,23 @@ class GNNDataset(Dataset):
 
     def download(self):
         print("Called download")
-
+    def single_process(self, node_path):
+        num = self.indices[node_path]
+        iteration = node_path.partition("-nodes")
+        target_path = node_path.partition("-")[0]+"-hcost.csv"
+        x, y = parse.parse_node_features(node_path, target_path)
+        edge_path = node_path.partition("-")[0]+"-edges.csv"
+        edge_index = parse.parse_edge_features(edge_path)
+        data = Data(x=x, y=y, edge_index=edge_index)
+        torch.save(data, os.path.join(self.processed_paths[num]))
     def process(self):
         print("Called process")
-        num = 0
-        with Bar("Processing Graphs", max=self.length) as bar:
-            for node_path in glob.iglob(os.path.join(self.dataDir, "*-nodes*.csv")):
-                iteration = node_path.partition("-nodes")
-                target_path = node_path.partition("-")[0]+"-hcost.csv"
-                x, y = parse.parse_node_features(node_path, target_path)
-                edge_path = node_path.partition("-")[0]+"-edges.csv"
-                edge_index = parse.parse_edge_features(edge_path)
-                data = Data(x=x, y=y, edge_index=edge_index)
-                # data, slices = self.collate(data_list)
-                torch.save(data, os.path.join(self.processed_paths[num]))
-                num += 1
-                del data
-                del x
-                del y
-                del edge_index
-                gc.collect()
-                bar.next()
+        pool = Pool(cpu_count())
+        paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
+        with Pool(processes=cpu_count()) as p:
+            with tqdm(total=self.length) as pbar:
+                for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
+                    pbar.update()
         print("Finished Processing")
         
     def len(self):
