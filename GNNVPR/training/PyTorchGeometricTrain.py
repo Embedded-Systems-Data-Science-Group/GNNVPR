@@ -324,9 +324,9 @@ class GNNDataset(Dataset):
         torch.save(data, os.path.join(self.processed_paths[num]))
     def process(self):
         print("Called process")
-        pool = Pool(cpu_count())
+        # pool = Pool(cpu_count())
         paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
-        with Pool(processes=cpu_count()) as p:
+        with Pool(processes=32) as p:
             with tqdm(total=self.length) as pbar:
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
                     pbar.update()
