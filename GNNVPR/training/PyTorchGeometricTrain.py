@@ -23,7 +23,7 @@ from multiprocessing import Pool, freeze_support, cpu_count
 from progress.bar import Bar
 from sklearn.metrics import r2_score
 from torch_geometric.utils.convert import to_networkx, from_networkx
-from torch_geometric.data import Data, DataLoader, InMemoryDataset
+from torch_geometric.data import Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler
 from torch_geometric.data import Data, DataLoader, Dataset
 from torch_geometric.transforms import ToSparseTensor
 from torch.cuda.amp import autocast, GradScaler
@@ -294,7 +294,7 @@ class GNNDataset(Dataset):
         self.outDir = outDir
         self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes*.csv")))
         self.pathdict = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
-        self.indices = {k: i for i, k in enumerate(self.pathdict)}
+        self.indices2 = {k: i for i, k in enumerate(self.pathdict)}
         self.dataExtensions = dataExtensions
         super(GNNDataset, self).__init__(root, transform, pre_transform)
         # self.data, self.slices = torch.load(self.processed_paths[0])
@@ -313,8 +313,9 @@ class GNNDataset(Dataset):
 
     def download(self):
         print("Called download")
+        
     def single_process(self, node_path):
-        num = self.indices[node_path]
+        num = self.indices2[node_path]
         iteration = node_path.partition("-nodes")
         target_path = node_path.partition("-")[0]+"-hcost.csv"
         x, y = parse.parse_node_features(node_path, target_path)
@@ -326,7 +327,7 @@ class GNNDataset(Dataset):
         print("Called process")
         # pool = Pool(cpu_count())
         paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
-        with Pool(processes=32) as p:
+        with Pool(processes=8) as p:
             with tqdm(total=self.length) as pbar:
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
                     pbar.update()
@@ -383,24 +384,24 @@ class SAGEConv(MessagePassing):
 class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self):
         super(GraNNy_ViPeR, self).__init__()
-        self.NUM_FEATURES = 11
+        self.NUM_FEATURES = 14
         # self.conv1 = SAGEConv(1, 128)
-        L_0 = 32
-        L_1 = 8
-        K_1 = 8
+        L_0 = 128
+        L_1 = 15
+        K_1 = 15
         NUM_RELATIONS = 3
         self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_0)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(L_0, L_0)
         self.conv3 = torch_geometric.nn.conv.SAGEConv(L_0, 1)
         
         # TAG Conv
-        # self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
-        # self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
-        # self.Tconv1 = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1, K=K_1)
-        # self.Tconv2 = torch_geometric.nn.conv.TAGConv(L_1, L_1, K=K_1)
-        # self.Tconv3 = torch_geometric.nn.conv.TAGConv(L_1, 1, K=K_1)
+        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
+        self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
+        self.Tconv1 = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1, K=K_1)
+        self.Tconv2 = torch_geometric.nn.conv.TAGConv(L_1, L_1, K=K_1)
+        self.Tconv3 = torch_geometric.nn.conv.TAGConv(L_1, 1, K=K_1)
         
-        self.lin1 = torch.nn.Linear(1, 1)
+        self.lin1 = torch.nn.Linear(2, 1)
         # self.lin2 = torch.nn.Linear(2, 1)
         
        
@@ -421,7 +422,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         # data = torch_geometric.nn.pool.max_pool_neighbor_x(data)
         x, edge_index = data.x, data.edge_index
        
-        # # * Layer 1
+        # # # * Layer 1
         x1 = self.conv1(x, edge_index)
         # Sigmoid Here
         x1 = self.sig1a(x1)
@@ -443,23 +444,23 @@ class GraNNy_ViPeR(torch.nn.Module):
         # x2 = F.relu((self.Tconv2a(x2, edge_index)))
 
         # * Layer 3
-        # x3 = self.Tconv1(x, edge_index)
-        # # Sigmoid here
-        # x3 = self.sig3(x3)
-        # x3 = self.Tconv2(x3, edge_index)
-        # x3 = self.sig3(x3)
-        # x3 = self.Tconv2(x3, edge_index)
-        # x3 = self.sig3(x3)
-        # x3 = self.Tconv2(x3, edge_index)
-        # x3 = self.sig3(x3)
-        # x3 = self.Tconv2(x3, edge_index)
-        # x3 = self.sig3(x3)
-        # x3 = F.relu((self.Tconv3(x3, edge_index)))
+        x3 = self.Tconv1(x, edge_index)
+        # Sigmoid here
+        x3 = self.sig3(x3)
+        x3 = self.Tconv2(x3, edge_index)
+        x3 = self.sig3(x3)
+        x3 = self.Tconv2(x3, edge_index)
+        x3 = self.sig3(x3)
+        x3 = self.Tconv2(x3, edge_index)
+        x3 = self.sig3(x3)
+        x3 = self.Tconv2(x3, edge_index)
+        x3 = self.sig3(x3)
+        x3 = F.relu((self.Tconv3(x3, edge_index)))
         
-        x = x1
+        # x = x3
        
         
-        # x = torch.cat((x2, x3), dim=1)
+        x = torch.cat((x1, x3), dim=1)
         # Pooling
         
         x = self.lin1(x)
@@ -485,6 +486,7 @@ def main(options):
 
         loss_all = 0
         for data in train_loader:
+
             data = data.to(device)
             optimizer.zero_grad()
             with autocast(enabled=use_FP16):
@@ -500,11 +502,13 @@ def main(options):
             if not use_FP16:
                 scalar.scale(loss).backward()
                 scalar.step(optimizer)
-                loss_all += data.num_graphs * loss.item()
+
+                # loss_all += data.num_graphs * loss.item()
+                loss_all += loss.item()
                 scalar.update()
             if use_FP16:
                 loss.backward()
-                loss_all += data.num_graphs * loss.item()
+                loss_all += loss.item()
                 optimizer.step()
                                   
         return loss_all / len(train_dataset)
@@ -532,18 +536,26 @@ def main(options):
 
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
+    
+    # dataset = dataset.shuffle()
+    train_dataset = dataset[142]
+    # one_tenth_length = int(len(dataset) * 0.1)
+    # train_dataset = dataset[:one_tenth_length * 8]
+    # val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
+    # test_dataset = dataset[one_tenth_length * 9:]
+    # len(train_dataset), len(val_dataset), len(test_dataset)
+    print("The Dataset is of size", len(dataset))
+    batch_size = 1024
+    # train_loader = DataLoader(train_dataset, batch_size=batch_size)
+    # train_dataset.edge_index
 
-    dataset = dataset.shuffle()
-    one_tenth_length = int(len(dataset) * 0.1)
-    train_dataset = dataset[:one_tenth_length * 8]
-    val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
-    test_dataset = dataset[one_tenth_length * 9:]
-    len(train_dataset), len(val_dataset), len(test_dataset)
-
-    batch_size = 1
-    train_loader = DataLoader(train_dataset, batch_size=batch_size)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    # train_loader = NeighborSampler(train_dataset.edge_index, sizes=[25, 10], num_workers=32, )
+    train_loader = GraphSAINTNodeSampler(train_dataset, batch_size=6000, num_steps=1024)
+    print("Train Loader is of size", len(train_loader))
+    # val_loader = NeighborSampler(val_dataset.edge_index,node_idx=val_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
+    # test_loader = NeighborSampler(test_dataset.edge_index,node_idx=test_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
+    # val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     # num_items = df.item_id.max() + 1
     # num_categories = df.category.max() + 1
@@ -560,9 +572,12 @@ def main(options):
         loss = train()
         train_loss = evaluate(train_loader)
         
-        val_loss = evaluate(val_loader)
+        # val_loss = evaluate(val_loader)
+        val_loss = -1
         
-        test_loss = evaluate(test_loader)
+        
+        # test_loss = evaluate(test_loader)
+        test_loss = -1
         run = time.perf_counter() - initial
         if (epoch % 10 == 0) or epoch == 1:
             print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
