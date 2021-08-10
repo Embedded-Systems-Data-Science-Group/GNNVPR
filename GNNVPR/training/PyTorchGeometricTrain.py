@@ -23,7 +23,7 @@ from multiprocessing import Pool, freeze_support, cpu_count
 from progress.bar import Bar
 from sklearn.metrics import r2_score
 from torch_geometric.utils.convert import to_networkx, from_networkx
-from torch_geometric.data import Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler
+from torch_geometric.data import Batch, Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler
 from torch_geometric.data import Data, DataLoader, Dataset
 from torch_geometric.transforms import ToSparseTensor
 from torch.cuda.amp import autocast, GradScaler
@@ -316,7 +316,6 @@ class GNNDataset(Dataset):
         
     def single_process(self, node_path):
         num = self.indices2[node_path]
-        iteration = node_path.partition("-nodes")
         target_path = node_path.partition("-")[0]+"-hcost.csv"
         x, y = parse.parse_node_features(node_path, target_path)
         edge_path = node_path.partition("-")[0]+"-edges.csv"
@@ -502,9 +501,8 @@ def main(options):
             if not use_FP16:
                 scalar.scale(loss).backward()
                 scalar.step(optimizer)
-
-                # loss_all += data.num_graphs * loss.item()
-                loss_all += loss.item()
+                loss_all += data.num_graphs * loss.item()
+                # loss_all += loss.item()
                 scalar.update()
             if use_FP16:
                 loss.backward()
@@ -537,21 +535,29 @@ def main(options):
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
     
-    # dataset = dataset.shuffle()
-    train_dataset = dataset[142]
-    # one_tenth_length = int(len(dataset) * 0.1)
-    # train_dataset = dataset[:one_tenth_length * 8]
-    # val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
-    # test_dataset = dataset[one_tenth_length * 9:]
-    # len(train_dataset), len(val_dataset), len(test_dataset)
+    dataset = dataset.shuffle()
+    one_tenth_length = int(len(dataset) * 0.1)
+    # Train Dataset
+    train_dataset = dataset[:one_tenth_length * 8]
+    train_dataset = Batch.from_data_list(train_dataset)
+    # Validation Dataset
+    val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
+    val_dataset = Batch.from_data_list(val_dataset)
+    # Test Dataset
+    test_dataset = dataset[one_tenth_length * 9:]
+    test_dataset = Batch.from_data_list(test_dataset)
+    
+    len(train_dataset), len(val_dataset), len(test_dataset)
     print("The Dataset is of size", len(dataset))
-    batch_size = 1024
+    # batch_size = 1
+    
+    # Old Loader
     # train_loader = DataLoader(train_dataset, batch_size=batch_size)
-    # train_dataset.edge_index
 
     # train_loader = NeighborSampler(train_dataset.edge_index, sizes=[25, 10], num_workers=32, )
-    train_loader = GraphSAINTNodeSampler(train_dataset, batch_size=6000, num_steps=1024)
-    print("Train Loader is of size", len(train_loader))
+    train_loader = GraphSAINTNodeSampler(train_dataset, batch_size=2000, num_steps=1024)
+    val_loader = GraphSAINTNodeSampler(val_dataset, batch_size=2000, num_steps=1024)
+    test_loader = GraphSAINTNodeSampler(test_dataset, batch_size=2000, num_steps=1024)
     # val_loader = NeighborSampler(val_dataset.edge_index,node_idx=val_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
     # test_loader = NeighborSampler(test_dataset.edge_index,node_idx=test_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
     # val_loader = DataLoader(val_dataset, batch_size=batch_size)
@@ -572,12 +578,12 @@ def main(options):
         loss = train()
         train_loss = evaluate(train_loader)
         
-        # val_loss = evaluate(val_loader)
-        val_loss = -1
+        val_loss = evaluate(val_loader)
+        # val_loss = -1
         
         
-        # test_loss = evaluate(test_loader)
-        test_loss = -1
+        test_loss = evaluate(test_loader)
+        # test_loss = -1
         run = time.perf_counter() - initial
         if (epoch % 10 == 0) or epoch == 1:
             print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
