@@ -23,7 +23,9 @@ from multiprocessing import Pool, freeze_support, cpu_count
 from progress.bar import Bar
 from sklearn.metrics import r2_score
 from torch_geometric.utils.convert import to_networkx, from_networkx
-from torch_geometric.data import Batch, Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler
+from torch_geometric.data import Batch, Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler, ClusterData, ClusterLoader
+from torch_geometric.data import GraphSAINTRandomWalkSampler
+
 from torch_geometric.data import Data, DataLoader, Dataset
 from torch_geometric.transforms import ToSparseTensor
 from torch.cuda.amp import autocast, GradScaler
@@ -337,7 +339,8 @@ class GNNDataset(Dataset):
     
     def get(self, idx):
         data = torch.load(self.processed_paths[idx])
-        return data
+        data_loader = GraphSAINTNodeSampler(data, batch_size=1024, num_steps=25)
+        return data_loader
 
 
 class SAGEConv(MessagePassing):
@@ -385,17 +388,17 @@ class GraNNy_ViPeR(torch.nn.Module):
         super(GraNNy_ViPeR, self).__init__()
         self.NUM_FEATURES = 14
         # self.conv1 = SAGEConv(1, 128)
-        L_0 = 128
-        L_1 = 15
-        K_1 = 15
+        L_0 = 64
+        L_1 = 8
+        K_1 = 8
         NUM_RELATIONS = 3
         self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_0)
         self.conv2 = torch_geometric.nn.conv.SAGEConv(L_0, L_0)
         self.conv3 = torch_geometric.nn.conv.SAGEConv(L_0, 1)
         
         # TAG Conv
-        self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
-        self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
+        # self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
+        # self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
         self.Tconv1 = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1, K=K_1)
         self.Tconv2 = torch_geometric.nn.conv.TAGConv(L_1, L_1, K=K_1)
         self.Tconv3 = torch_geometric.nn.conv.TAGConv(L_1, 1, K=K_1)
@@ -484,31 +487,34 @@ def main(options):
         model.train()
 
         loss_all = 0
-        for data in train_loader:
+        pbar = tqdm(total=len(train_loader))
+        pbar.set_description(f'Epoch {epoch:02d}')
+        for loader in train_loader:
+            for data in loader:
 
-            data = data.to(device)
-            optimizer.zero_grad()
-            with autocast(enabled=use_FP16):
-                    
-                output = model(data)
+                data = data.to(device)
+                optimizer.zero_grad()
+                with autocast(enabled=use_FP16):
+                        
+                    output = model(data)
 
-                target = data.y.to(device)
-    
-    # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
-    # target)
-            # loss = torch.nn.MSELoss()(output.to(torch.float32), target)
-            loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-            if not use_FP16:
-                scalar.scale(loss).backward()
-                scalar.step(optimizer)
-                loss_all += data.num_graphs * loss.item()
-                # loss_all += loss.item()
-                scalar.update()
-            if use_FP16:
-                loss.backward()
-                loss_all += loss.item()
-                optimizer.step()
-                                  
+                    target = data.y.to(device)
+        
+        # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
+        # target)
+                # loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+                loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
+                if not use_FP16:
+                    scalar.scale(loss).backward()
+                    scalar.step(optimizer)
+                    loss_all += loss.item() *  len(train_dataset)
+                    # loss_all += loss.item()
+                    scalar.update()
+                if use_FP16:
+                    loss.backward()
+                    loss_all += loss.item()
+                    optimizer.step()
+            pbar.update()
         return loss_all / len(train_dataset)
 
     def evaluate(loader):
@@ -517,58 +523,80 @@ def main(options):
         maes = []
 
         with torch.no_grad():
-            for data in loader:
-                data = data.to(device)
-                with autocast(enabled=use_FP16):
-                    pred = model(data).detach().cpu().numpy()
-                    target = data.y.detach().cpu().numpy()
-                # predictions.append(pred)
-                # targets.append(target)
-                    #  loss = torch.nn.MSELoss
-                    maes.append(mean_absolute_error(target, pred))               
+            for loader in train_loader:
+                for data in loader:
+                    data = data.to(device)
+                    with autocast(enabled=use_FP16):
+                        pred = model(data).detach().cpu().numpy()
+                        target = data.y.detach().cpu().numpy()
+                    # predictions.append(pred)
+                    # targets.append(target)
+                        #  loss = torch.nn.MSELoss
+                        maes.append(mean_absolute_error(target, pred))               
 
         # predictions = np.hstack(predictions)
         # targets = np.hstack(targets)
     
         return sum(maes) / len(maes)
-
+    print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
     
     dataset = dataset.shuffle()
+    
     one_tenth_length = int(len(dataset) * 0.1)
+    # dataset = dataset[:one_tenth_length * 2]
+    # one_tenth_length = int(len(dataset) * 0.1)
     # Train Dataset
     train_dataset = dataset[:one_tenth_length * 8]
-    train_dataset = Batch.from_data_list(train_dataset)
+    # train_dataset = Batch.from_data_list(train_dataset)
     # Validation Dataset
     val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
-    val_dataset = Batch.from_data_list(val_dataset)
+    # val_dataset = Batch.from_data_list(val_dataset)
     # Test Dataset
     test_dataset = dataset[one_tenth_length * 9:]
-    test_dataset = Batch.from_data_list(test_dataset)
-    
+    # test_dataset = Batch.from_data_list(test_dataset)
     len(train_dataset), len(val_dataset), len(test_dataset)
-    print("The Dataset is of size", len(dataset))
+    print("Done")
     # batch_size = 1
     
     # Old Loader
     # train_loader = DataLoader(train_dataset, batch_size=batch_size)
-
-    # train_loader = NeighborSampler(train_dataset.edge_index, sizes=[25, 10], num_workers=32, )
-    train_loader = GraphSAINTNodeSampler(train_dataset, batch_size=2000, num_steps=1024)
-    val_loader = GraphSAINTNodeSampler(val_dataset, batch_size=2000, num_steps=1024)
-    test_loader = GraphSAINTNodeSampler(test_dataset, batch_size=2000, num_steps=1024)
-    # val_loader = NeighborSampler(val_dataset.edge_index,node_idx=val_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
-    # test_loader = NeighborSampler(test_dataset.edge_index,node_idx=test_dataset.x, sizes=[25,10],num_workers=32, batch_size=batch_size)
     # val_loader = DataLoader(val_dataset, batch_size=batch_size)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    # train_loader = dict()
+    train_loader = train_dataset
+    # val_loader = dict()
+    val_loader = val_dataset
+    # test_loader = dict()
+    test_loader = test_dataset
+    print("Initializing Node Sampling")
+    # train_loader = list(map(lambda item: GraphSAINTNodeSampler(train_dataset[item], batch_size=6000, num_steps=1024),range(len(train_dataset))))
+    # val_loader = list(map(lambda item: GraphSAINTNodeSampler(val_dataset[item], batch_size=6000, num_steps=1024),range(len(val_dataset))))
+    # test_loader = list(map(lambda item: GraphSAINTNodeSampler(test_dataset[item], batch_size=6000, num_steps=1024),range(len(test_dataset))))
 
+    # TODO: Parallelize This lol
+    # for item in range(len(train_dataset)):
+    #     # print(item)
+    #     train_loader[item] = GraphSAINTNodeSampler(train_dataset[item], batch_size=train_dataset[item].num_nodes, num_steps=1024)
+    # for item in range(len(val_dataset)):
+    #     # print(item)
+    #     val_loader[item] = GraphSAINTNodeSampler(val_dataset[item], batch_size=val_dataset[item].num_nodes, num_steps=1024)
+
+    # for item in range(len(test_dataset)):
+    #     # print(item)
+        # test_loader[item] = GraphSAINTNodeSampler(test_dataset[item], batch_size=test_dataset[item].num_nodes, num_steps=1024)
+
+    # val_loader = GraphSAINTNodeSampler(val_dataset, batch_size=6000, num_steps=1024)
+    # test_loader = GraphSAINTNodeSampler(test_dataset, batch_size=6000, num_steps=1024)
+    # print(type(train_loader[0]))
+    print("Done")
     # num_items = df.item_id.max() + 1
     # num_categories = df.category.max() + 1
     # num_items, num_categories
 
     # device = torch.device("cpu")
-    
+    print("Starting Training: on device: ", device)
     model = GraNNy_ViPeR().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
