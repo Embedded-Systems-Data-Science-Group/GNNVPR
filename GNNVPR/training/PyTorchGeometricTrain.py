@@ -4,33 +4,35 @@ Returns:
     pkl file: an output model file as well as training results.
 """
 import ast
-import itertools
-from optparse import OptionParser
-import os
 import glob
-import torch
-import tqdm
-from tqdm import *
-import networkx as nx
+import itertools
+import os
 import time
+from multiprocessing import Pool, cpu_count, freeze_support
+from optparse import OptionParser
+
+import networkx as nx
+import torch
 # import 
 import torch.nn.functional as F
-import torch_geometric.nn.pool
 import torch_geometric.nn.conv
+from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv
 import torch_geometric.nn.dense
-from sklearn.metrics import mean_absolute_error
-from multiprocessing import Pool, freeze_support, cpu_count
+import torch_geometric.nn.pool
+import tqdm
 from progress.bar import Bar
-from sklearn.metrics import r2_score
-from torch_geometric.utils.convert import to_networkx, from_networkx
-from torch_geometric.data import Batch, Data, DataLoader, InMemoryDataset, NeighborSampler, GraphSAINTNodeSampler, ClusterData, ClusterLoader
-from torch_geometric.data import GraphSAINTRandomWalkSampler
-
-from torch_geometric.data import Data, DataLoader, Dataset
-from torch_geometric.transforms import ToSparseTensor
-from torch.cuda.amp import autocast, GradScaler
+from sklearn.metrics import mean_absolute_error, r2_score
+from torch.cuda.amp import GradScaler, autocast
+from torch_geometric.data import (Batch, ClusterData, ClusterLoader, Data,
+                                  DataLoader, Dataset, GraphSAINTNodeSampler,
+                                  GraphSAINTRandomWalkSampler, InMemoryDataset,
+                                  NeighborSampler)
 from torch_geometric.nn import MessagePassing
+from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.utils import add_self_loops, remove_self_loops
+from torch_geometric.utils.convert import from_networkx, to_networkx
+from tqdm import *
+
 import parse
 
 embed_dim = 128
@@ -339,204 +341,101 @@ class GNNDataset(Dataset):
     
     def get(self, idx):
         data = torch.load(self.processed_paths[idx])
-        data_loader = GraphSAINTNodeSampler(data, batch_size=1024, num_steps=25)
+        # data = ClusterData(data, num_parts=128)
+        # data_loader = ClusterLoader(data)
+        data_loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=5)
         return data_loader
 
 
-class SAGEConv(MessagePassing):
-    def __init__(self, in_channels, out_channels):
-        # "Max" aggregation.
-        super(SAGEConv, self).__init__(aggr='max', node_dim=-1)
-        self.lin = torch.nn.Linear(in_channels, out_channels)
-        self.act = torch.nn.ReLU()
-        self.update_lin = torch.nn.Linear(
-            in_channels + out_channels, in_channels, bias=False)
-        self.update_act = torch.nn.ReLU()
-
-    def forward(self, x, edge_index):
-        # x has shape [N, in_channels]
-        # edge_index has shape [2, E]
-
-        edge_index, _ = remove_self_loops(edge_index)
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
-
-        return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
-
-    def message(self, x_j):
-        
-        # x_j has shape [E, in_channels]
-
-        x_j = self.lin(x_j)
-        x_j = self.act(x_j)
-
-        return x_j
-
-    def update(self, aggr_out, x):
-        
-        # aggr_out has shape [N, out_channels]
-
-        new_embedding = torch.cat([aggr_out, x], dim=1)
-
-        new_embedding = self.update_lin(new_embedding)
-        new_embedding = self.update_act(new_embedding)
-
-        return new_embedding
-
-
 class GraNNy_ViPeR(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels, hidden_channels, out_channels):
         super(GraNNy_ViPeR, self).__init__()
-        self.NUM_FEATURES = 14
-        # self.conv1 = SAGEConv(1, 128)
-        L_0 = 64
-        L_1 = 8
-        K_1 = 8
-        NUM_RELATIONS = 3
-        self.conv1 = torch_geometric.nn.conv.SAGEConv(self.NUM_FEATURES, L_0)
-        self.conv2 = torch_geometric.nn.conv.SAGEConv(L_0, L_0)
-        self.conv3 = torch_geometric.nn.conv.SAGEConv(L_0, 1)
-        
-        # TAG Conv
-        # self.Tconv1a = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1)
-        # self.Tconv2a = torch_geometric.nn.conv.TAGConv(L_1, 1)
-        self.Tconv1 = torch_geometric.nn.conv.TAGConv(self.NUM_FEATURES, L_1, K=K_1)
-        self.Tconv2 = torch_geometric.nn.conv.TAGConv(L_1, L_1, K=K_1)
-        self.Tconv3 = torch_geometric.nn.conv.TAGConv(L_1, 1, K=K_1)
-        
-        self.lin1 = torch.nn.Linear(2, 1)
-        # self.lin2 = torch.nn.Linear(2, 1)
-        
-       
-        
-        self.sig1a = torch.nn.Sigmoid()
-        self.sig1b = torch.nn.Sigmoid()
-        self.sig2 = torch.nn.Sigmoid()
-        
-        self.sig3 = torch.nn.Sigmoid()
-        self.sig4 = torch.nn.Sigmoid()
-        self.bn1 = torch.nn.BatchNorm1d(128)
-        self.bn2 = torch.nn.BatchNorm1d(64)
-        self.act1 = torch.nn.ReLU()
-        self.act2 = torch.nn.ReLU()
-        self.act3 = torch.nn.ReLU()
- 
-    def forward(self, data):
-        # data = torch_geometric.nn.pool.max_pool_neighbor_x(data)
-        x, edge_index = data.x, data.edge_index
-       
-        # # # * Layer 1
-        x1 = self.conv1(x, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1a(x1)
-        x1 = self.conv2(x1, edge_index)
-        x1 = self.sig1a(x1)
-        x1 = self.conv2(x1, edge_index)
-        x1 = self.sig1a(x1)
-        x1 = self.conv2(x1, edge_index)
-        x1 = self.sig1a(x1)
-        x1 = self.conv2(x1, edge_index)
-        # Sigmoid Here
-        x1 = self.sig1b(x1)
-        x1 = F.relu(self.conv3(x1, edge_index))
-  
-        # # * Layer 2
-        # x2 = self.Tconv1a(x, edge_index)
-        # # Sigmoid Here
-        # x2 = self.sig2(x2)
-        # x2 = F.relu((self.Tconv2a(x2, edge_index)))
+     
+        self.num_layers = 3
+        self.convs = torch.nn.ModuleList()
+        self.convs.append(TAGConv(in_channels, hidden_channels))
+        self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        self.convs.append(TAGConv(hidden_channels, out_channels))
+        self.linear = torch.nn.Linear(1, 1)
 
-        # * Layer 3
-        x3 = self.Tconv1(x, edge_index)
-        # Sigmoid here
-        x3 = self.sig3(x3)
-        x3 = self.Tconv2(x3, edge_index)
-        x3 = self.sig3(x3)
-        x3 = self.Tconv2(x3, edge_index)
-        x3 = self.sig3(x3)
-        x3 = self.Tconv2(x3, edge_index)
-        x3 = self.sig3(x3)
-        x3 = self.Tconv2(x3, edge_index)
-        x3 = self.sig3(x3)
-        x3 = F.relu((self.Tconv3(x3, edge_index)))
-        
-        # x = x3
-       
-        
-        x = torch.cat((x1, x3), dim=1)
-        # Pooling
-        
-        x = self.lin1(x)
-        x = F.relu(x)
-        # Label Normalization
+    def forward(self, data):
+        # print(dir(data))
+        x, edge_index = data.x, data.edge_index
+        for i in range(self.num_layers):
+            x = self.convs[i](x, edge_index)
+            if i != self.num_layers - 1:
+                x = torch.sigmoid(x)
+        # # Label Normalization
+        x = self.linear(x)
+        x =  F.relu(x)
         indices = torch.randperm(len(x))[:int(len(x)*.98)]
         zeros = torch.zeros(len(x[indices]), 1).to(device)
         x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
-        # x = x * 10
-        # x = F.dropout(x, p=0.5, training=self.training)
-        
         return x
 
+
+    def inference(self, data_loader):
+        # Here we are sent the entire subgraph loader, and compute per that
+        # TODO: Refactor.
+        # x, edge_index = data.x, data.edge_index
+        for i in range(self.num_layers):
+            xs = []
+            for data in data_loader:
+                data = data.to(device)
+                x, edge_index = data.x, data.edge_index
+                x = self.convs[i](x, edge_index)
+                if i != self.num_layers - 1:
+                    x = F.sigmoid(x)
+                else:
+                    x = self.linear(x)
+                    x =  F.relu(x)
+                    indices = torch.randperm(len(x))[:int(len(x)*.98)]
+                    zeros = torch.zeros(len(x[indices]), 1).to(device)
+                    x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
+                    xs.append(x.cpu())
+        # # Label Normalization
+            x_all = torch.cat(xs, dim=0)
+        return x_all
         
 
 
 use_FP16=False
 
 def main(options):
-
     def train():
         model.train()
-
         loss_all = 0
-        pbar = tqdm(total=len(train_loader))
-        pbar.set_description(f'Epoch {epoch:02d}')
+        total_nodes = 0
         for loader in train_loader:
+            loss_local = 0
+            nodes_local = 0
             for data in loader:
-
                 data = data.to(device)
                 optimizer.zero_grad()
-                with autocast(enabled=use_FP16):
-                        
-                    output = model(data)
-
-                    target = data.y.to(device)
-        
-        # loss = torch.nn.BCEWithLogitsLoss()(output.to(torch.float32),
-        # target)
-                # loss = torch.nn.MSELoss()(output.to(torch.float32), target)
+                output = model(data)
+                target = data.y.to(device)
                 loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-                if not use_FP16:
-                    scalar.scale(loss).backward()
-                    scalar.step(optimizer)
-                    loss_all += loss.item() *  len(train_dataset)
-                    # loss_all += loss.item()
-                    scalar.update()
-                if use_FP16:
-                    loss.backward()
-                    loss_all += loss.item()
-                    optimizer.step()
-            pbar.update()
-        return loss_all / len(train_dataset)
+                scalar.scale(loss).backward()
+                scalar.step(optimizer)
+                loss_local += loss.item() * data.num_nodes
+                nodes_local += data.num_nodes
+                scalar.update()
+            total_nodes += nodes_local
+            loss_all +=  loss_local
+        return loss_all / total_nodes
 
     def evaluate(loader):
         model.eval()
-
         maes = []
-
         with torch.no_grad():
             for loader in train_loader:
-                for data in loader:
-                    data = data.to(device)
-                    with autocast(enabled=use_FP16):
-                        pred = model(data).detach().cpu().numpy()
-                        target = data.y.detach().cpu().numpy()
-                    # predictions.append(pred)
-                    # targets.append(target)
-                        #  loss = torch.nn.MSELoss
-                        maes.append(mean_absolute_error(target, pred))               
-
+                for load in loader:
+                    load = load.to(device)
+                    pred = model(load).detach().cpu().numpy()
+                    target = data.y.detach().cpu().numpy()
+                    maes.append(mean_absolute_error(target, pred))               
         # predictions = np.hstack(predictions)
         # targets = np.hstack(targets)
-    
         return sum(maes) / len(maes)
     print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
@@ -545,59 +444,21 @@ def main(options):
     dataset = dataset.shuffle()
     
     one_tenth_length = int(len(dataset) * 0.1)
-    # dataset = dataset[:one_tenth_length * 2]
-    # one_tenth_length = int(len(dataset) * 0.1)
-    # Train Dataset
+
     train_dataset = dataset[:one_tenth_length * 8]
-    # train_dataset = Batch.from_data_list(train_dataset)
-    # Validation Dataset
     val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
-    # val_dataset = Batch.from_data_list(val_dataset)
-    # Test Dataset
     test_dataset = dataset[one_tenth_length * 9:]
-    # test_dataset = Batch.from_data_list(test_dataset)
+
     len(train_dataset), len(val_dataset), len(test_dataset)
     print("Done")
-    # batch_size = 1
-    
-    # Old Loader
-    # train_loader = DataLoader(train_dataset, batch_size=batch_size)
-    # val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    # test_loader = DataLoader(test_dataset, batch_size=batch_size)
-    # train_loader = dict()
+
     train_loader = train_dataset
-    # val_loader = dict()
     val_loader = val_dataset
-    # test_loader = dict()
     test_loader = test_dataset
-    print("Initializing Node Sampling")
-    # train_loader = list(map(lambda item: GraphSAINTNodeSampler(train_dataset[item], batch_size=6000, num_steps=1024),range(len(train_dataset))))
-    # val_loader = list(map(lambda item: GraphSAINTNodeSampler(val_dataset[item], batch_size=6000, num_steps=1024),range(len(val_dataset))))
-    # test_loader = list(map(lambda item: GraphSAINTNodeSampler(test_dataset[item], batch_size=6000, num_steps=1024),range(len(test_dataset))))
 
-    # TODO: Parallelize This lol
-    # for item in range(len(train_dataset)):
-    #     # print(item)
-    #     train_loader[item] = GraphSAINTNodeSampler(train_dataset[item], batch_size=train_dataset[item].num_nodes, num_steps=1024)
-    # for item in range(len(val_dataset)):
-    #     # print(item)
-    #     val_loader[item] = GraphSAINTNodeSampler(val_dataset[item], batch_size=val_dataset[item].num_nodes, num_steps=1024)
 
-    # for item in range(len(test_dataset)):
-    #     # print(item)
-        # test_loader[item] = GraphSAINTNodeSampler(test_dataset[item], batch_size=test_dataset[item].num_nodes, num_steps=1024)
-
-    # val_loader = GraphSAINTNodeSampler(val_dataset, batch_size=6000, num_steps=1024)
-    # test_loader = GraphSAINTNodeSampler(test_dataset, batch_size=6000, num_steps=1024)
-    # print(type(train_loader[0]))
-    print("Done")
-    # num_items = df.item_id.max() + 1
-    # num_categories = df.category.max() + 1
-    # num_items, num_categories
-
-    # device = torch.device("cpu")
     print("Starting Training: on device: ", device)
-    model = GraNNy_ViPeR().to(device)
+    model = GraNNy_ViPeR(14, 128, 1).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
     scalar = GradScaler()
@@ -605,7 +466,7 @@ def main(options):
     for epoch in range(1, 200):
         loss = train()
         train_loss = evaluate(train_loader)
-        
+        # train_loss = -1
         val_loss = evaluate(val_loader)
         # val_loss = -1
         
