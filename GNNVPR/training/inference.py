@@ -20,8 +20,8 @@ embed_dim = 128
 # from PyTorchGeometricTrain import GNNDataset
 
 def main(options):
-    device = "cpu"
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     t1 = time.time()
     proc_dir = options.inputDirectory+"processed/"
     for file in glob.glob(os.path.join(proc_dir, "*.pt")):
@@ -31,8 +31,8 @@ def main(options):
         shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
     print("--- Loading CSV Data took %s seconds ---" % (time.time() - t1))
     t2 = time.time()
-    model = PyTorchGeometricTrain.GraNNy_ViPeR().to(device)
-    model.load_state_dict(torch.load('/home/spicygremlin/Github/CS220/model.pt'))
+    model = PyTorchGeometricTrain.GraNNy_ViPeR(14, 128, 1).to(device)
+    model.load_state_dict(torch.load('/benchmarks/model.pt'))
     model.eval()
     print("--- Model Loading took %s seconds ---" % (time.time() - t2))
     t4 = time.time()
@@ -41,8 +41,10 @@ def main(options):
                                                options.outputDirectory)
     print("--- Processing CSV took %s seconds ---" % (time.time() - t4))
     t3 = time.time()
-    test_loader = DataLoader(dataset, batch_size=1)
+    # test_loader = DataLoader(dataset, batch_size=1)
+    test_loader = dataset
     for data in test_loader:
+        # for data in loader:
         t5 = time.time()
         data = data.to(device)
         pred = model(data).detach().cpu().numpy()

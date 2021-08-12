@@ -343,21 +343,28 @@ class GNNDataset(Dataset):
         data = torch.load(self.processed_paths[idx])
         # data = ClusterData(data, num_parts=128)
         # data_loader = ClusterLoader(data)
-        data_loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=5)
-        return data_loader
+        # data_loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=20)
+        # return data_loader
+        return data
 
 
 class GraNNy_ViPeR(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GraNNy_ViPeR, self).__init__()
      
-        self.num_layers = 3
+      
         self.convs = torch.nn.ModuleList()
         self.convs.append(TAGConv(in_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
+        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
         self.convs.append(TAGConv(hidden_channels, hidden_channels))
         self.convs.append(TAGConv(hidden_channels, out_channels))
         self.linear = torch.nn.Linear(1, 1)
-
+        self.num_layers = len(self.convs)
     def forward(self, data):
         # print(dir(data))
         x, edge_index = data.x, data.edge_index
@@ -407,6 +414,7 @@ def main(options):
         loss_all = 0
         total_nodes = 0
         for loader in train_loader:
+            loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=5)
             loss_local = 0
             nodes_local = 0
             for data in loader:
@@ -432,7 +440,7 @@ def main(options):
                 for load in loader:
                     load = load.to(device)
                     pred = model(load).detach().cpu().numpy()
-                    target = data.y.detach().cpu().numpy()
+                    target = load.y.detach().cpu().numpy()
                     maes.append(mean_absolute_error(target, pred))               
         # predictions = np.hstack(predictions)
         # targets = np.hstack(targets)
