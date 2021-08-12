@@ -371,7 +371,7 @@ class GraNNy_ViPeR(torch.nn.Module):
         for i in range(self.num_layers):
             x = self.convs[i](x, edge_index)
             if i != self.num_layers - 1:
-                x = torch.sigmoid(x)
+                x = F.relu(x)
         # # Label Normalization
         x = self.linear(x)
         x =  F.relu(x)

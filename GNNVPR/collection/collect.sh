@@ -15,7 +15,7 @@ TITANJR="$BASEDIRECTORY/blif/TITANJR/*.blif"
 
 # Argument Options
 # TODO: Refactor to be more modular. 
-ARGS="--route_chan_width 300 -j 6 --collect_data on --gnntype 3 > /dev/null 2>&1"
+ARGS="--route_chan_width 300 -j 6 --gnntype 1 > /dev/null 2>&1 "
 ARGS_HYPE="--route_chan_width 300 -j 8 --collect_data on"
 ARGS_OUT="--route_chan_width 300 -j 6 --output_final_costs on > /dev/null 2>&1"
 ARGS_IN="--route_chan_width 300 -j 6 --input_initial_costs on > /dev/null 2>&1"
@@ -55,10 +55,11 @@ run_benchmark() {
 
 # 1. Name, 2. Architecture Directory, 3. Benchmarks, 4. Architecture, 5. VTR Arguments
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
-run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
-run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
-run_benchmark "STRATXIV TITAN" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGSR"
-run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGSR"
+# run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS"
+run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSN"
+# run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS"
+# run_benchmark "STRATXIV TITAN" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS"
+# run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS"
 
 
 # run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
