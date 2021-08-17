@@ -5,9 +5,6 @@ Use a GNN as the heuristic generator for pathfinder VPR algorithm
 VTR to VPR is an Open Source tool. We modify it in order to both collect data for training and input inferenced history costs. 
 
 ## PyTorch & Pytorch Geometric
-We use PyTorch running a GNN that uses SAGE and TAG Convolutional layers from the papers here: 
+We use PyTorch running a GNN that uses SAGE and TAG Convolutional layers.
 
-## How to Run:
-1. Data Collection
-2. Data Preprocessing
-3. 
+## How to Run: (TBD)
