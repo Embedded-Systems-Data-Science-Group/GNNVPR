@@ -3,6 +3,12 @@
 Returns:
     pkl file: an output model file as well as training results.
 """
+# Recollecting with no fixed width (might change everything)
+# #####
+# 1. Rewrite Neighborhood Sampling in PyTorch Geometric to utilize the GPU fully
+# 2. Port GNNVPR to DGL (Sampling, FP16 Models, etc)
+# 3. Feature Engineering on VPR (Per-Node History Acceleration & Present Cost Acceleration)
+# 4. Feature Engineering 2: Global-Graph Properties (Route Channel Width, Ending Pres Factor, Pres Acceleration)
 import ast
 import glob
 import itertools
@@ -329,7 +335,7 @@ class GNNDataset(Dataset):
     def process(self):
         print("Called process")
         # pool = Pool(cpu_count())
-        paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
+        paths = glob.glob(os.path.join(self.daftaDir, "*-nodes*.csv"))
         with Pool(processes=8) as p:
             with tqdm(total=self.length) as pbar:
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
@@ -355,12 +361,6 @@ class GraNNy_ViPeR(torch.nn.Module):
       
         self.convs = torch.nn.ModuleList()
         self.convs.append(TAGConv(in_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        # self.convs.append(TAGConv(hidden_channels, hidden_channels))
         self.convs.append(TAGConv(hidden_channels, hidden_channels))
         self.convs.append(TAGConv(hidden_channels, out_channels))
         self.linear = torch.nn.Linear(1, 1)
@@ -414,7 +414,7 @@ def main(options):
         loss_all = 0
         total_nodes = 0
         for loader in train_loader:
-            loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=5)
+            loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
             loss_local = 0
             nodes_local = 0
             for data in loader:
@@ -437,6 +437,7 @@ def main(options):
         maes = []
         with torch.no_grad():
             for loader in train_loader:
+                loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
                 for load in loader:
                     load = load.to(device)
                     pred = model(load).detach().cpu().numpy()

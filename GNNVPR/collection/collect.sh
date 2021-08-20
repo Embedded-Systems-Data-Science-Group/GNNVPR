@@ -15,12 +15,13 @@ TITANJR="$BASEDIRECTORY/blif/TITANJR/*.blif"
 
 # Argument Options
 # TODO: Refactor to be more modular. 
-ARGS="--route_chan_width 300 -j 6 --gnntype 1 > /dev/null 2>&1 "
-ARGS_HYPE="--route_chan_width 300 -j 8 --collect_data on"
+ARGS_MINW="-j 6 --collect_data off --collect_metrics off --gvminw on > /dev/null 2>&1"
+ARGS="-j 6 --gnntype 1 > /dev/null 2>&1 "
+ARGS_HYPE=" -j 8 --gnntype 2 > /dev/null 2>&1 "
 ARGS_OUT="--route_chan_width 300 -j 6 --output_final_costs on > /dev/null 2>&1"
 ARGS_IN="--route_chan_width 300 -j 6 --input_initial_costs on > /dev/null 2>&1"
 ARGSN="--route_chan_width 300 -j 6 > /dev/null 2>&1"
-ARGSR="--route_chan_width 300 -j 6 --collect_data on > /dev/null 2>&1"
+ARGSR="-j 16 --collect_data on > /dev/null 2>&1"
 
 cd "$OUTPUT"
 IFS="/." read -a arch <<< "$STRATXIV"
@@ -52,14 +53,25 @@ run_benchmark() {
     done
 
 }
+# Creates CSV with header, all benchmarks append to this. 
+collect_minw_header() {
+
+    echo "architecture,circuit,minw" > "/benchmarks/minw_data/minw.csv"
+
+}
+collect_minw_header
+run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS_MINW"
+run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_MINW"
+run_benchmark "STRATXIV TITANJR MINW" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS_MINW"
+run_benchmark "STRATXIV TITAN MINW" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS_MINW"
 
 # 1. Name, 2. Architecture Directory, 3. Benchmarks, 4. Architecture, 5. VTR Arguments
-# run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
+
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS"
-run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSN"
-# run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS"
-# run_benchmark "STRATXIV TITAN" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS"
-# run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS"
+# run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS_HYPE"
+# run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_HYPE"
+# run_benchmark "STRATXIV TITAN" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS_HYPE"
+# run_benchmark "STRATXIV TITANJR" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS_HYPE"
 
 
 # run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
