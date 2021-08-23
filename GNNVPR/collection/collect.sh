@@ -15,14 +15,17 @@ TITANJR="$BASEDIRECTORY/blif/TITANJR/*.blif"
 
 # Argument Options
 # TODO: Refactor to be more modular. 
-ARGS_MINW="-j 6 --collect_data off --collect_metrics off --gvminw on > /dev/null 2>&1"
+# ARGS_MINW="-j 6 --collect_data off --collect_metrics off --gvminw on > /dev/null 2>&1"
 ARGS="-j 6 --gnntype 1 > /dev/null 2>&1 "
 ARGS_HYPE=" -j 8 --gnntype 2 > /dev/null 2>&1 "
 ARGS_OUT="--route_chan_width 300 -j 6 --output_final_costs on > /dev/null 2>&1"
 ARGS_IN="--route_chan_width 300 -j 6 --input_initial_costs on > /dev/null 2>&1"
 ARGSN="--route_chan_width 300 -j 6 > /dev/null 2>&1"
-ARGSR="-j 16 --collect_data on > /dev/null 2>&1"
 
+# Collect Data
+ARGSR="-j 16 --collect_data on --route_chan_width"
+# Ignore Output
+ERR="> /dev/null 2>&1"
 cd "$OUTPUT"
 IFS="/." read -a arch <<< "$STRATXIV"
 arch_dir1=${arch[-3]}
@@ -47,23 +50,25 @@ run_benchmark() {
             _mydir="$(pwd)"
             rm -f "$_mydir"/inference/*.csv
             rm -f "$_mydir"/inference/raw/*.csv
-            eval "$INITIAL $4 $b $5"
+            # eval python script with circuit & arch path -> get values back.
+            MINW=$(python /benchmarks/GNNVPR/GNNVPR/collection/minw.py -a "$4" -c "$b" 2>&1)
+            eval "$INITIAL $4 $b $5 ${MINW}"
             cd "$OUTPUT"
         done
     done
 
 }
 # Creates CSV with header, all benchmarks append to this. 
-collect_minw_header() {
+# collect_minw_header() {
 
-    echo "architecture,circuit,minw" > "/benchmarks/minw_data/minw.csv"
+#     echo "architecture,circuit,minw" > "/benchmarks/minw_data/minw.csv"
 
-}
-collect_minw_header
-run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS_MINW"
-run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_MINW"
-run_benchmark "STRATXIV TITANJR MINW" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS_MINW"
-run_benchmark "STRATXIV TITAN MINW" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS_MINW"
+# }
+# collect_minw_header
+run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
+# run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_MINW"
+# run_benchmark "STRATXIV TITANJR MINW" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS_MINW"
+# run_benchmark "STRATXIV TITAN MINW" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS_MINW"
 
 # 1. Name, 2. Architecture Directory, 3. Benchmarks, 4. Architecture, 5. VTR Arguments
 
