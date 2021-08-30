@@ -37,13 +37,13 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.utils import add_self_loops, remove_self_loops
 from torch_geometric.utils.convert import from_networkx, to_networkx
-from tqdm import *
 
 import parse
 
+# GLOBALS: 
 embed_dim = 128
+use_FP16=False
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = "cpu"
 
 class TrainNodes:
     def __init__(self,
@@ -311,13 +311,12 @@ class GNNDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        # print("Called raw_file_names")
-        # return parse.FindSpecificFiles(self.dataDir)
+        print("Called raw_file_names")
         return parse.FindSpecificFiles(self.dataDir, self.dataExtensions)
 
     @property
     def processed_file_names(self):
-        # print("Called processed_file_names")
+        print("Called processed_file_names")
         return ['GNN_Processed_Data_{}.pt'.format(i) for i in
                 range(self.length)]
 
@@ -332,10 +331,11 @@ class GNNDataset(Dataset):
         edge_index = parse.parse_edge_features(edge_path)
         data = Data(x=x, y=y, edge_index=edge_index)
         torch.save(data, os.path.join(self.processed_paths[num]))
+
     def process(self):
         print("Called process")
         # pool = Pool(cpu_count())
-        paths = glob.glob(os.path.join(self.daftaDir, "*-nodes*.csv"))
+        paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
         with Pool(processes=8) as p:
             with tqdm(total=self.length) as pbar:
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
@@ -347,16 +347,12 @@ class GNNDataset(Dataset):
     
     def get(self, idx):
         data = torch.load(self.processed_paths[idx])
-        # data = ClusterData(data, num_parts=128)
-        # data_loader = ClusterLoader(data)
-        # data_loader = GraphSAINTNodeSampler(data, batch_size=6000, num_steps=20)
-        # return data_loader
         return data
 
 
-class GraNNy_ViPeR(torch.nn.Module):
+class GNNVPR(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
-        super(GraNNy_ViPeR, self).__init__()
+        super(GNNVPR, self).__init__()
      
       
         self.convs = torch.nn.ModuleList()
@@ -405,9 +401,6 @@ class GraNNy_ViPeR(torch.nn.Module):
         return x_all
         
 
-
-use_FP16=False
-
 def main(options):
     def train():
         model.train()
@@ -443,21 +436,16 @@ def main(options):
                     pred = model(load).detach().cpu().numpy()
                     target = load.y.detach().cpu().numpy()
                     maes.append(mean_absolute_error(target, pred))               
-        # predictions = np.hstack(predictions)
-        # targets = np.hstack(targets)
         return sum(maes) / len(maes)
+
     print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
-    
     dataset = dataset.shuffle()
-    
-    one_tenth_length = int(len(dataset) * 0.1)
-
+    one_tenth_length = int(len(dataset) * 0.1)m
     train_dataset = dataset[:one_tenth_length * 8]
     val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
     test_dataset = dataset[one_tenth_length * 9:]
-
     len(train_dataset), len(val_dataset), len(test_dataset)
     print("Done")
 
@@ -465,9 +453,8 @@ def main(options):
     val_loader = val_dataset
     test_loader = test_dataset
 
-
     print("Starting Training: on device: ", device)
-    model = GraNNy_ViPeR(14, 128, 1).to(device)
+    model = GNNVPR(14, 128, 1).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
     scalar = GradScaler()
@@ -475,27 +462,20 @@ def main(options):
     for epoch in range(1, 200):
         loss = train()
         train_loss = evaluate(train_loader)
-        # train_loss = -1
         val_loss = evaluate(val_loader)
-        # val_loss = -1
-        
-        
         test_loss = evaluate(test_loader)
-        # test_loss = -1
         run = time.perf_counter() - initial
-        if (epoch % 10 == 0) or epoch == 1:
-            print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
-                   'Val MAE: {:.5f}, Test MAE: {:.5f},' +
-                   'Time: {:.2f}').format(epoch, loss,
-                                          train_loss,
-                                          val_loss,
-                                          test_loss,
-                                          run))
-            torch.save(model.state_dict(), "model.pt")
+        print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
+                'Val MAE: {:.5f}, Test MAE: {:.5f},' +
+                'Time: {:.2f}').format(epoch, loss,
+                                        train_loss,
+                                        val_loss,
+                                        test_loss,
+                                        run))
+        torch.save(model.state_dict(), "model.pt")
 
     return
-
-
+    
 if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-I", "--inputDirectory", dest="inputDirectory",

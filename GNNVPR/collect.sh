@@ -14,18 +14,18 @@ MCNC="$BASEDIRECTORY/blif/MCNC/*.blif"
 TITANJR="$BASEDIRECTORY/blif/TITANJR/*.blif"
 
 # Argument Options
-# TODO: Refactor to be more modular. 
-# ARGS_MINW="-j 6 --collect_data off --collect_metrics off --gvminw on > /dev/null 2>&1"
-ARGS="-j 6 --gnntype 1 > /dev/null 2>&1 "
-ARGS_HYPE=" -j 8 --gnntype 2 > /dev/null 2>&1 "
-ARGS_OUT="--route_chan_width 300 -j 6 --output_final_costs on > /dev/null 2>&1"
-ARGS_IN="--route_chan_width 300 -j 6 --input_initial_costs on > /dev/null 2>&1"
-ARGSN="--route_chan_width 300 -j 6 > /dev/null 2>&1"
 
-# Collect Data
-ARGSR="-j 16 --collect_data on --route_chan_width"
+
+# Arguments
+ARGSR="-j 16 --collect_data on --route_chan_width" 
+ARGSG="-j 16 --gnntype 1 --route_chan_width"
+ARGSH="-j 16 --gnntype 2 --route_chan_width"
+ARGSO="-j 16 --output_final_costs on --route_chan_width"
+ARGSI="-j 16 --gnntype 3 --route_chan_width"
+
 # Ignore Output
 ERR="> /dev/null 2>&1"
+# ERR=""
 cd "$OUTPUT"
 IFS="/." read -a arch <<< "$STRATXIV"
 arch_dir1=${arch[-3]}
@@ -51,8 +51,8 @@ run_benchmark() {
             rm -f "$_mydir"/inference/*.csv
             rm -f "$_mydir"/inference/raw/*.csv
             # eval python script with circuit & arch path -> get values back.
-            MINW=$(python /benchmarks/GNNVPR/GNNVPR/collection/minw.py -a "$4" -c "$b" 2>&1)
-            eval "$INITIAL $4 $b $5 ${MINW}"
+            MINW=$(python /benchmarks/GNNVPR/GNNVPR/minw.py -a $4 -c $b 2>&1)
+            eval "$INITIAL $4 $b $5 ${MINW} $ERR"
             cd "$OUTPUT"
         done
     done
@@ -65,13 +65,19 @@ run_benchmark() {
 
 # }
 # collect_minw_header
-run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
-# run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_MINW"
-# run_benchmark "STRATXIV TITANJR MINW" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGS_MINW"
-# run_benchmark "STRATXIV TITAN MINW" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGS_MINW"
+# run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSR"
+# run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
+
+
+# run_benchmark "STRATXIV TITANJR MINW" "$arch_dir1" "$TITANJR" "$STRATXIV" "$ARGSR"
+# run_benchmark "STRATXIV TITAN MINW" "$arch_dir1" "$TITAN" "$STRATXIV" "$ARGSR"
 
 # 1. Name, 2. Architecture Directory, 3. Benchmarks, 4. Architecture, 5. VTR Arguments
+# run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSO"
+# run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSO"
 
+run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSI"
+run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSI"
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS"
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS_HYPE"
 # run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_HYPE"
