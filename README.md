@@ -13,7 +13,31 @@ Considering the size of graphs - the largest ones being 10 million nodes & 100 m
 
 ## Results:
 
-Our Model resulted in generally worse performance of routing across the board. (Graphs WIP)
+Our Model resulted in generally worse performance of routing across the board: (init is the GNN)
+```
+Average:  -9.27%
+                 init  reg time_init time_reg CPD_init CPD_REG Reduction
+EArch__alu4        22   18      5.34     0.43     8.42    5.24   -22.22%
+EArch__apex2       19   16     13.45     0.60     8.75    6.22   -18.75%
+EArch__apex4       22   21     19.90     0.55     9.59    5.50    -4.76%
+EArch__bigkey      18   15      0.75     0.40     3.78    3.11   -20.00%
+EArch__clma        19   16    122.95     2.45    13.39   11.06   -18.75%
+EArch__des         17   15      6.24     0.54     7.66    5.83   -13.33%
+EArch__diffeq      15   15      1.79     0.31     7.82    6.56     0.00%
+EArch__dsip        15   17      1.82     0.41     3.88    2.77    11.76%
+EArch__elliptic    19   17     37.26     1.00    10.13    9.33   -11.76%
+EArch__ex1010      19   17     34.34     1.44    10.08    7.57   -11.76%
+EArch__ex5p        19   19      9.31     0.40     8.52    5.30     0.00%
+EArch__frisc       15   14     16.74     0.92    12.64   12.50    -7.14%
+EArch__misex3      20   18      9.02     0.47     8.68    5.48   -11.11%
+EArch__pdc         20   18    218.36     1.92    13.18    8.01   -11.11%
+EArch__s298        18   18      1.91     0.45    12.05   10.13     0.00%
+EArch__s38417      17   16      5.88     1.20    10.28    7.84    -6.25%
+EArch__s38584      18   16     11.80     1.13     8.54    6.58   -12.50%
+EArch__seq         20   18     18.75     0.60     8.60    5.24   -11.11%
+EArch__spla        22   20    118.15     1.64    11.46    7.22   -10.00%
+EArch__tseng       16   15      0.56     0.22     8.22    6.47    -6.67%
+```
 
 ## How to Run:
 We assume you are running on Linux, with PyTorch & PyTorch Geometric running & working on a GPU. 
