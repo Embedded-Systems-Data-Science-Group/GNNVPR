@@ -13,9 +13,7 @@ Considering the size of graphs - the largest ones being 10 million nodes & 100 m
 
 ## Results:
 
-Our Model resulted in generally worse performance of routing across the board. 
-
-(PUT GRAPHS HERE)
+Our Model resulted in generally worse performance of routing across the board. (Graphs WIP)
 
 ## How to Run:
 We assume you are running on Linux, with PyTorch & PyTorch Geometric running & working on a GPU. 
