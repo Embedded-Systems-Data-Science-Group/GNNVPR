@@ -1,1 +1,0 @@
-each dataset should have a folder of Edgelist.csv, Nodelist.csv, etc

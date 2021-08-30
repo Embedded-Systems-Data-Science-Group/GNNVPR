@@ -1,1 +1,0 @@
-vpr $VTR_ROOT/vtr_flow/arch/titan/stratixiv_arch.timing.xml $VTR_ROOT/vtr_flow/benchmarks/titan_blif/neuron_stratixiv_arch_timing.blif --route_chan_width 300
