@@ -1,5 +1,5 @@
 # GNN-Accelerated FPGA Routing
-This project is uses a Graph Neural Network to attempt to accelerate Pathfinder Routing of FPGAs. We used the MCNC & Titan Benchmarks using the VPR Example Architecture & Stratix IV. 
+This project uses a Graph Neural Network to attempt to accelerate Pathfinder Routing of FPGAs. We used the MCNC & Titan Benchmarks using the VPR Example Architecture & Stratix IV. 
 
 The current state of the project is negative results. The GNN currently both takes longer, more iterations, with worse Critical-Path-Delay. 
 
