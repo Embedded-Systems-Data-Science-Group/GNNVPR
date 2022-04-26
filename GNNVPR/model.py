@@ -22,7 +22,8 @@ import torch
 # import 
 import torch.nn.functional as F
 import torch_geometric.nn.conv
-from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv
+from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv
+# Try NNConv, GATv2Conv, GINConv, update dependencies. 
 import torch_geometric.nn.dense
 import torch_geometric.nn.pool
 import tqdm
@@ -316,7 +317,7 @@ class GNNDataset(Dataset):
 
     @property
     def processed_file_names(self):
-        print("Called processed_file_names")
+        # print("Called processed_file_names")
         return ['GNN_Processed_Data_{}.pt'.format(i) for i in
                 range(self.length)]
 
@@ -337,7 +338,7 @@ class GNNDataset(Dataset):
         # pool = Pool(cpu_count())
         paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
         with Pool(processes=8) as p:
-            with tqdm(total=self.length) as pbar:
+            with tqdm.tqdm(total=self.length) as pbar:
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
                     pbar.update()
         print("Finished Processing")
@@ -356,21 +357,41 @@ class GNNVPR(torch.nn.Module):
      
       
         self.convs = torch.nn.ModuleList()
-        self.convs.append(TAGConv(in_channels, hidden_channels))
-        self.convs.append(TAGConv(hidden_channels, hidden_channels))
-        self.convs.append(TAGConv(hidden_channels, out_channels))
-        self.linear = torch.nn.Linear(1, 1)
+        self.convs.append(GATConv(in_channels, hidden_channels))
+        self.convs.append(GATConv(hidden_channels, hidden_channels))
+        self.convs.append(GATConv(hidden_channels, hidden_channels))
+        self.convs.append(GATConv(hidden_channels, hidden_channels))
+        self.convs.append(GATConv(hidden_channels, out_channels))
         self.num_layers = len(self.convs)
+
+        
+        self.convs2 = torch.nn.ModuleList()
+        self.convs2.append(TAGConv(in_channels, hidden_channels))
+        self.convs2.append(TAGConv(hidden_channels, hidden_channels))
+        self.convs2.append(TAGConv(hidden_channels, out_channels))
+        self.num_layers2 = len(self.convs)
+
+        self.linear = torch.nn.Linear(2, 1)
+
     def forward(self, data):
         # print(dir(data))
         x, edge_index = data.x, data.edge_index
+        x_1 = x
+        x_2 = x
         for i in range(self.num_layers):
-            x = self.convs[i](x, edge_index)
+            x_1 = self.convs[i](x_1, edge_index)
             if i != self.num_layers - 1:
-                x = F.relu(x)
+                x_1 = F.relu(x_1)
+
+        for i in range(self.num_layers):
+            x_2= self.convs[i](x_2, edge_index)
+            if i != self.num_layers - 1:
+                x_2 = F.relu(x_2)
         # # Label Normalization
+
+        x = torch.cat([x_1, x_2], dim=1)
         x = self.linear(x)
-        x =  F.relu(x)
+        x = F.relu(x)
         indices = torch.randperm(len(x))[:int(len(x)*.98)]
         zeros = torch.zeros(len(x[indices]), 1).to(device)
         x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
@@ -381,23 +402,44 @@ class GNNVPR(torch.nn.Module):
         # Here we are sent the entire subgraph loader, and compute per that
         # TODO: Refactor.
         # x, edge_index = data.x, data.edge_index
+        
+       
         for i in range(self.num_layers):
             xs = []
             for data in data_loader:
                 data = data.to(device)
-                x, edge_index = data.x, data.edge_index
-                x = self.convs[i](x, edge_index)
+                x_1, edge_index = data.x, data.edge_index
+                x_1 = self.convs[i](x, edge_index)
                 if i != self.num_layers - 1:
-                    x = F.sigmoid(x)
+                    x_1 = F.sigmoid(x)
                 else:
-                    x = self.linear(x)
-                    x =  F.relu(x)
-                    indices = torch.randperm(len(x))[:int(len(x)*.98)]
-                    zeros = torch.zeros(len(x[indices]), 1).to(device)
-                    x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
-                    xs.append(x.cpu())
+                    x_1 = self.linear(x)
+                    x_1 = F.relu(x)
+                    indices = torch.randperm(len(x_1))[:int(len(x)*.98)]
+                    zeros = torch.zeros(len(x_1[indices]), 1).to(device)
+                    x_1[indices] = torch.where(data.y[indices] == 0., zeros, x_1[indices])
+                    xs.append(x_1.cpu())
+            x_all = torch.cat(xs_2, dim=0)
         # # Label Normalization
-            x_all = torch.cat(xs, dim=0)
+        for i in range(self.num_layers2):
+            xs_2 = []
+            for data in data_loader:
+                data = data.to(device)
+                x_2, edge_index = data.x, data.edge_index
+                x_2 = self.convs2[i](x, edge_index)
+                if i != self.num_layers2 - 1:
+                    x_2 = F.sigmoid(x)
+                else:
+                    x_2 = self.linear(x)
+                    x_2 = F.relu(x)
+                    indices = torch.randperm(len(x_2))[:int(len(x)*.98)]
+                    zeros = torch.zeros(len(x_2[indices]), 1).to(device)
+                    x_2[indices] = torch.where(data.y[indices] == 0., zeros, x_2[indices])
+                    xs_2.append(x_2.cpu())
+            x_all2 = torch.cat(xs_2, dim=0)
+            
+        x_all = torch.cat([x_all, x_all2], dim=1)
+        x_all = self.linear(x_all)
         return x_all
         
 
@@ -406,43 +448,44 @@ def main(options):
         model.train()
         loss_all = 0
         total_nodes = 0
-        for loader in train_loader:
-            loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
-            loss_local = 0
-            nodes_local = 0
-            for data in loader:
-                data = data.to(device)
-                optimizer.zero_grad()
-                output = model(data)
-                target = data.y.to(device)
-                loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-                scalar.scale(loss).backward()
-                scalar.step(optimizer)
-                loss_local += loss.item() * data.num_nodes
-                nodes_local += data.num_nodes
-                scalar.update()
-            total_nodes += nodes_local
-            loss_all +=  loss_local
+        # for loader in train_loader:
+        #     # loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
+        #     loader = 
+        loss_local = 0
+        nodes_local = 0
+        for data in train_loader:
+            data = data.to(device)
+            optimizer.zero_grad()
+            output = model(data)
+            target = data.y.to(device)
+            loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
+            scalar.scale(loss).backward()
+            scalar.step(optimizer)
+            loss_local += loss.item() * data.num_nodes
+            nodes_local += data.num_nodes
+            scalar.update()
+        total_nodes += nodes_local
+        loss_all +=  loss_local
         return loss_all / total_nodes
 
     def evaluate(loader):
         model.eval()
         maes = []
         with torch.no_grad():
-            for loader in train_loader:
-                loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
-                for load in loader:
-                    load = load.to(device)
-                    pred = model(load).detach().cpu().numpy()
-                    target = load.y.detach().cpu().numpy()
-                    maes.append(mean_absolute_error(target, pred))               
+            # for loader in train_loader:
+            #     loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
+            for load in train_loader:
+                load = load.to(device)
+                pred = model(load).detach().cpu().numpy()
+                target = load.y.detach().cpu().numpy()
+                maes.append(mean_absolute_error(target, pred))               
         return sum(maes) / len(maes)
 
     print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
     dataset = dataset.shuffle()
-    one_tenth_length = int(len(dataset) * 0.1)m
+    one_tenth_length = int(len(dataset) * 0.1)
     train_dataset = dataset[:one_tenth_length * 8]
     val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
     test_dataset = dataset[one_tenth_length * 9:]
@@ -454,12 +497,12 @@ def main(options):
     test_loader = test_dataset
 
     print("Starting Training: on device: ", device)
-    model = GNNVPR(14, 128, 1).to(device)
+    model = GNNVPR(14, 3, 1).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
                                  weight_decay=5e-4)
     scalar = GradScaler()
     initial = time.perf_counter()
-    for epoch in range(1, 200):
+    for epoch in range(1, 10000):
         loss = train()
         train_loss = evaluate(train_loader)
         val_loss = evaluate(val_loader)

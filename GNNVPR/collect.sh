@@ -2,7 +2,7 @@
 # Output Folder
 
 # VPR Command
-BASEDIRECTORY="/benchmarks"
+BASEDIRECTORY="/mnt/e/benchmarks"
 OUTPUT="$BASEDIRECTORY/Outputs/"
 INITIAL="$VTR_ROOT/vpr/vpr"
 # Architectures
@@ -49,9 +49,11 @@ run_benchmark() {
             cd $curdir
             _mydir="$(pwd)"
             rm -f "$_mydir"/inference/*.csv
+            rm -f "$_mydir"/inference/processed/*
             rm -f "$_mydir"/inference/raw/*.csv
             # eval python script with circuit & arch path -> get values back.
-            MINW=$(python /benchmarks/GNNVPR/GNNVPR/minw.py -a $4 -c $b 2>&1)
+            echo "$(pwd)"
+            MINW=$(python /home/spicygremlin/Github/CS220/GNNVPR/minw.py -a $4 -c $b 2>&1)
             eval "$INITIAL $4 $b $5 ${MINW} $ERR"
             cd "$OUTPUT"
         done
@@ -76,8 +78,8 @@ run_benchmark() {
 # run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSO"
 # run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSO"
 
-run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSI"
-run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSI"
+run_benchmark "EARCH MCNC MINW" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSG"
+# run_benchmark "STRATXIV MCNC MINW" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSR"
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS"
 # run_benchmark "EARCH MCNC" "$arch_dir2" "$MCNC" "$EARCH" "$ARGS_HYPE"
 # run_benchmark "STRATXIV MCNC" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGS_HYPE"

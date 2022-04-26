@@ -15,7 +15,6 @@ import networkx as nx
 # import matplotlib.pyplot as plt
 from optparse import OptionParser
 
-import PyTorchGeometricTrain
 import torch
 import numpy as np
 from progress.bar import Bar

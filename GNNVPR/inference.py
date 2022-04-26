@@ -1,6 +1,5 @@
 """Runs Inference on a specified input benchmark from a specified model.
 """
-import PyTorchGeometricTrain
 from optparse import OptionParser
 import pandas as pd
 import torch
@@ -11,6 +10,34 @@ import numpy as np
 import math
 import shutil
 from shutil import copyfile
+import ast
+import glob
+import itertools
+import os
+import time
+from multiprocessing import Pool, cpu_count, freeze_support
+from optparse import OptionParser
+import model
+import networkx as nx
+import torch
+# import 
+import torch.nn.functional as F
+import torch_geometric.nn.conv
+from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv
+import torch_geometric.nn.dense
+import torch_geometric.nn.pool
+import tqdm
+from progress.bar import Bar
+from sklearn.metrics import mean_absolute_error, r2_score
+from torch.cuda.amp import GradScaler, autocast
+from torch_geometric.data import (Batch, ClusterData, ClusterLoader, Data,
+                                  DataLoader, Dataset, GraphSAINTNodeSampler,
+                                  GraphSAINTRandomWalkSampler, InMemoryDataset,
+                                  NeighborSampler)
+from torch_geometric.nn import MessagePassing
+from torch_geometric.transforms import ToSparseTensor
+from torch_geometric.utils import add_self_loops, remove_self_loops
+from torch_geometric.utils.convert import from_networkx, to_networkx
 from torch_geometric.data import DataLoader
 
 embed_dim = 128
@@ -31,12 +58,12 @@ def main(options):
         shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
     print("--- Loading CSV Data took %s seconds ---" % (time.time() - t1))
     t2 = time.time()
-    model = PyTorchGeometricTrain.GraNNy_ViPeR(14, 128, 1).to(device)
-    model.load_state_dict(torch.load('/benchmarks/model.pt'))
-    model.eval()
+    model2 = model.GNNVPR(14, 4, 1).to(device)
+    model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.pt'))
+    model2.eval()
     print("--- Model Loading took %s seconds ---" % (time.time() - t2))
     t4 = time.time()
-    dataset = PyTorchGeometricTrain.GNNDataset(options.inputDirectory,
+    dataset = model.GNNDataset(options.inputDirectory,
                                                options.inputDirectory,
                                                options.outputDirectory)
     print("--- Processing CSV took %s seconds ---" % (time.time() - t4))
@@ -47,7 +74,7 @@ def main(options):
         # for data in loader:
         t5 = time.time()
         data = data.to(device)
-        pred = model(data).detach().cpu().numpy()
+        pred = model2(data).detach().cpu().numpy()
         print("--- Direct Model Inference took %s seconds ---" % (time.time() - t5))
         # * Measure time for this. 
         # * Save directly to csv?
