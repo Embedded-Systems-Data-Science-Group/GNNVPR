@@ -393,7 +393,7 @@ class GNNVPR(torch.nn.Module):
         # x = x_1
         x = self.linear(x)
         x = F.relu(x)
-        x = F.dropout(x, p=0.5)
+        x = F.dropout(x, p=0.98)
      
         return x
 
@@ -452,7 +452,7 @@ def main(options):
     test_loader = test_dataset
 
     print("Starting Training: on device: ", device)
-    model = GNNVPR(14, 10, 1).to(device)
+    model = GNNVPR(14, 3, 1).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01,
                                  weight_decay=5e-4)
     scalar = GradScaler()
