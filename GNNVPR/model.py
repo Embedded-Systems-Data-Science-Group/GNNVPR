@@ -380,21 +380,21 @@ class GNNVPR(torch.nn.Module):
             x_1 = self.convs[i](x_1, edge_index)
             if i != self.num_layers - 1:
                 x_1 = F.relu(x_1)
-                x_1 = F.dropout(x_1, p=0.5)
+                # x_1 = F.dropout(x_1, p=0.5)
 
         for i in range(self.num_layers2):
             x_2 = self.convs2[i](x_2, edge_index)
             if i != self.num_layers2 - 1:
                 x_2 = F.relu(x_2)
-                x_2 = F.dropout(x_2, p=0.5)
+                # x_2 = F.dropout(x_2, p=0.5)
         # Label Normalization
 
         x = torch.cat([x_1, x_2], dim=1)
         # x = x_1
         x = self.linear(x)
         x = F.relu(x)
-        x = F.dropout(x, p=0.98)
-     
+        x_i = F.dropout(x, p=0.98)
+        x = torch.where(data.y == 0., x_i, x)
         return x
 
         
