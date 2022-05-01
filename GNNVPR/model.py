@@ -17,12 +17,13 @@ import time
 from multiprocessing import Pool, cpu_count, freeze_support
 from optparse import OptionParser
 
+
 import networkx as nx
 import torch
 # import 
 import torch.nn.functional as F
 import torch_geometric.nn.conv
-from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv
+from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv, GATv2Conv, ResGatedGraphConv
 # Try NNConv, GATv2Conv, GINConv, update dependencies. 
 import torch_geometric.nn.dense
 import torch_geometric.nn.pool
@@ -357,14 +358,11 @@ class GNNVPR(torch.nn.Module):
      
       
         self.convs = torch.nn.ModuleList()
-        self.convs.append(GATConv(in_channels, hidden_channels))
-        self.convs.append(GATConv(hidden_channels, hidden_channels))
-        self.convs.append(GATConv(hidden_channels, hidden_channels))
-        self.convs.append(GATConv(hidden_channels, hidden_channels))
-        self.convs.append(GATConv(hidden_channels, out_channels))
+        self.convs.append(GATv2Conv(in_channels, hidden_channels))
+        self.convs.append(GATv2Conv(hidden_channels, hidden_channels))
+        self.convs.append(GATv2Conv(hidden_channels, out_channels))
         self.num_layers = len(self.convs)
 
-        
         self.convs2 = torch.nn.ModuleList()
         self.convs2.append(TAGConv(in_channels, hidden_channels))
         self.convs2.append(TAGConv(hidden_channels, hidden_channels))
@@ -376,73 +374,30 @@ class GNNVPR(torch.nn.Module):
     def forward(self, data):
         # print(dir(data))
         x, edge_index = data.x, data.edge_index
-        x_1 = x
-        x_2 = x
+        x_1 = torch.clone(x)
+        x_2 = torch.clone(x)
         for i in range(self.num_layers):
             x_1 = self.convs[i](x_1, edge_index)
             if i != self.num_layers - 1:
                 x_1 = F.relu(x_1)
+                x_1 = F.dropout(x_1, p=0.5)
 
-        for i in range(self.num_layers):
-            x_2= self.convs[i](x_2, edge_index)
-            if i != self.num_layers - 1:
+        for i in range(self.num_layers2):
+            x_2 = self.convs2[i](x_2, edge_index)
+            if i != self.num_layers2 - 1:
                 x_2 = F.relu(x_2)
-        # # Label Normalization
+                x_2 = F.dropout(x_2, p=0.5)
+        # Label Normalization
 
         x = torch.cat([x_1, x_2], dim=1)
+        # x = x_1
         x = self.linear(x)
         x = F.relu(x)
-        indices = torch.randperm(len(x))[:int(len(x)*.98)]
-        zeros = torch.zeros(len(x[indices]), 1).to(device)
-        x[indices] = torch.where(data.y[indices] == 0., zeros, x[indices])
+        x = F.dropout(x, p=0.5)
+     
         return x
 
-
-    def inference(self, data_loader):
-        # Here we are sent the entire subgraph loader, and compute per that
-        # TODO: Refactor.
-        # x, edge_index = data.x, data.edge_index
         
-       
-        for i in range(self.num_layers):
-            xs = []
-            for data in data_loader:
-                data = data.to(device)
-                x_1, edge_index = data.x, data.edge_index
-                x_1 = self.convs[i](x, edge_index)
-                if i != self.num_layers - 1:
-                    x_1 = F.sigmoid(x)
-                else:
-                    x_1 = self.linear(x)
-                    x_1 = F.relu(x)
-                    indices = torch.randperm(len(x_1))[:int(len(x)*.98)]
-                    zeros = torch.zeros(len(x_1[indices]), 1).to(device)
-                    x_1[indices] = torch.where(data.y[indices] == 0., zeros, x_1[indices])
-                    xs.append(x_1.cpu())
-            x_all = torch.cat(xs_2, dim=0)
-        # # Label Normalization
-        for i in range(self.num_layers2):
-            xs_2 = []
-            for data in data_loader:
-                data = data.to(device)
-                x_2, edge_index = data.x, data.edge_index
-                x_2 = self.convs2[i](x, edge_index)
-                if i != self.num_layers2 - 1:
-                    x_2 = F.sigmoid(x)
-                else:
-                    x_2 = self.linear(x)
-                    x_2 = F.relu(x)
-                    indices = torch.randperm(len(x_2))[:int(len(x)*.98)]
-                    zeros = torch.zeros(len(x_2[indices]), 1).to(device)
-                    x_2[indices] = torch.where(data.y[indices] == 0., zeros, x_2[indices])
-                    xs_2.append(x_2.cpu())
-            x_all2 = torch.cat(xs_2, dim=0)
-            
-        x_all = torch.cat([x_all, x_all2], dim=1)
-        x_all = self.linear(x_all)
-        return x_all
-        
-
 def main(options):
     def train():
         model.train()
@@ -451,21 +406,21 @@ def main(options):
         # for loader in train_loader:
         #     # loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
         #     loader = 
-        loss_local = 0
-        nodes_local = 0
+
+        ## Fix the Optimizer here, lol. 
         for data in train_loader:
             data = data.to(device)
-            optimizer.zero_grad()
             output = model(data)
             target = data.y.to(device)
             loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-            scalar.scale(loss).backward()
-            scalar.step(optimizer)
-            loss_local += loss.item() * data.num_nodes
-            nodes_local += data.num_nodes
-            scalar.update()
-        total_nodes += nodes_local
-        loss_all +=  loss_local
+            # loss.backward()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            loss_all += loss.item() * data.num_nodes
+            total_nodes += data.num_nodes
+            # scalar.update()
+        
         return loss_all / total_nodes
 
     def evaluate(loader):
@@ -497,11 +452,12 @@ def main(options):
     test_loader = test_dataset
 
     print("Starting Training: on device: ", device)
-    model = GNNVPR(14, 3, 1).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001,
+    model = GNNVPR(14, 10, 1).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01,
                                  weight_decay=5e-4)
     scalar = GradScaler()
     initial = time.perf_counter()
+    loss = train()
     for epoch in range(1, 10000):
         loss = train()
         train_loss = evaluate(train_loader)
