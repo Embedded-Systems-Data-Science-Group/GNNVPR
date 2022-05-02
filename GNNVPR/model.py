@@ -21,7 +21,9 @@ from optparse import OptionParser
 import networkx as nx
 import torch
 # import 
+import pytorch_lightning as pl
 import torch.nn.functional as F
+from torch.nn import ReLU, Dropout, Linear
 import torch_geometric.nn.conv
 from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv, GATv2Conv, ResGatedGraphConv
 # Try NNConv, GATv2Conv, GINConv, update dependencies. 
@@ -35,7 +37,7 @@ from torch_geometric.data import (Batch, ClusterData, ClusterLoader, Data,
                                   DataLoader, Dataset, GraphSAINTNodeSampler,
                                   GraphSAINTRandomWalkSampler, InMemoryDataset,
                                   NeighborSampler)
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import MessagePassing, Sequential, global_mean_pool
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.utils import add_self_loops, remove_self_loops
 from torch_geometric.utils.convert import from_networkx, to_networkx
@@ -352,6 +354,80 @@ class GNNDataset(Dataset):
         return data
 
 
+class GNNVPRL(pl.LightningModule):
+    def __init__(self, **kwargs):
+        super(GNNVPRL, self).__init__()
+
+        self.num_features = kwargs['num_features'] \
+            if "num_features" in kwargs.keys() else 14
+
+        self.num_targets = kwargs['num_features'] \
+            if "num_targets" in kwargs.keys() else 1
+
+        self.hidden = 3
+
+        self.GATSequential = Sequential("x, edge_index", [
+            (GATv2Conv(self.num_features, self.hidden), "x, edge_index -> x1"),
+            (ReLU(), "x1 -> x1d"),
+            (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x2"),
+            (ReLU(), "x2 -> x2d"),
+            (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x3"),
+            (ReLU(), "x3 -> x3d"),
+            (GATv2Conv(self.hidden, self.num_targets), "x3d, edge_index -> x4d")])
+
+        self.TAGSequential = Sequential("x, edge_index", [
+            (TAGConv(self.num_features, self.hidden), "x, edge_index -> x1"),
+            (ReLU(), "x1 -> x1t"),
+            (TAGConv(self.hidden, self.hidden), "x1t, edge_index -> x2"),
+            (ReLU(), "x2 -> x2t"),
+            (TAGConv(self.hidden, self.num_targets), "x2t, edge_index -> x3t")])
+        
+        self.SAGESequential = Sequential("x, edge_index", [
+            (SAGEConv(self.num_features, self.hidden), "x, edge_index -> x1"),
+            (ReLU(), "x1 -> x1s"),
+            (SAGEConv(self.hidden, self.hidden), "x1s, edge_index -> x2"),
+            (ReLU(), "x2 -> x2s"),
+            (SAGEConv(self.hidden, self.num_targets), "x2s, edge_index -> x3s")])
+
+        self.Linear = Linear(self.hidden, self.num_targets)
+
+        self.GATSequential.to(device)
+        self.TAGSequential.to(device)
+        self.SAGESequential.to(device)
+        self.total_nodes = 0
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        x1 = self.GATSequential(x, edge_index)
+        x2 = self.TAGSequential(x, edge_index)
+        x3 = self.SAGESequential(x, edge_index)
+        x4 = torch.cat((x1, x2, x3), dim=1)
+        x = self.Linear(x4)
+        x = F.relu(x)
+        x_i = F.dropout(x, p=0.95)
+        x = torch.where(data.y == 0., x_i, x)
+        return x
+
+    def training_step(self, data, batch_idx):
+        y_pred = self.forward(data)
+        loss = torch.nn.SmoothL1Loss()(y_pred, data.y)
+        return {'loss': loss}
+
+    def validation_step(self, data, batch_idx):
+        y_pred = self.forward(data)
+        loss = torch.nn.SmoothL1Loss()(y_pred, data.y)
+        # num_nodes = data.num_nodes
+        return {'val_loss': loss}
+    
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        tensorboard_logs = {'val_loss': avg_loss}
+        return {'avg_val_loss': avg_loss, 'log': tensorboard_logs}
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        return optimizer
+
 class GNNVPR(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GNNVPR, self).__init__()
@@ -447,6 +523,8 @@ def main(options):
         
         return loss_all / total_nodes
 
+    
+
     def evaluate(loader):
         model.eval()
         maes = []
@@ -476,26 +554,40 @@ def main(options):
     test_loader = test_dataset
 
     print("Starting Training: on device: ", device)
-    model = GNNVPR(14, 3, 1).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01,
-                                 weight_decay=5e-4)
-    scalar = GradScaler()
-    initial = time.perf_counter()
-    loss = train()
-    for epoch in range(1, 10000):
-        loss = train()
-        train_loss = evaluate(train_loader)
-        val_loss = evaluate(val_loader)
-        test_loss = evaluate(test_loader)
-        run = time.perf_counter() - initial
-        print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
-                'Val MAE: {:.5f}, Test MAE: {:.5f},' +
-                'Time: {:.2f}').format(epoch, loss,
-                                        train_loss,
-                                        val_loss,
-                                        test_loss,
-                                        run))
-        torch.save(model.state_dict(), "model.pt")
+    lightning_model = GNNVPRL()
+
+    num_epochs = 30
+    val_check_interval = len(train_loader)
+
+    trainer = pl.Trainer(max_epochs=num_epochs,
+                         val_check_interval=val_check_interval,
+                         gpus=[0])
+                         
+    trainer.fit(lightning_model, train_loader, val_loader)
+    trainer.save_checkpoint('model.ckpt')
+
+
+
+    # model = GNNVPR(14, 3, 1).to(device)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.01,
+    #                              weight_decay=5e-4)
+    # scalar = GradScaler()
+    # initial = time.perf_counter()
+    # loss = train()
+    # for epoch in range(1, 10000):
+    #     loss = train()
+    #     train_loss = evaluate(train_loader)
+    #     val_loss = evaluate(val_loader)
+    #     test_loss = evaluate(test_loader)
+    #     run = time.perf_counter() - initial
+    #     print(('Epoch: {:03d}, Loss: {:.5f}, Train MAE: {:.5f},' +
+    #             'Val MAE: {:.5f}, Test MAE: {:.5f},' +
+    #             'Time: {:.2f}').format(epoch, loss,
+    #                                     train_loss,
+    #                                     val_loss,
+    #                                     test_loss,
+    #                                     run))
+    #     torch.save(model.state_dict(), "model.pt")
 
     return
     
