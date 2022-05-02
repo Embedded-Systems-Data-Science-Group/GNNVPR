@@ -360,6 +360,7 @@ class GNNVPR(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         self.convs.append(GATv2Conv(in_channels, hidden_channels))
         self.convs.append(GATv2Conv(hidden_channels, hidden_channels))
+        self.convs.append(GATv2Conv(hidden_channels, hidden_channels))
         self.convs.append(GATv2Conv(hidden_channels, out_channels))
         self.num_layers = len(self.convs)
 
@@ -367,38 +368,61 @@ class GNNVPR(torch.nn.Module):
         self.convs2.append(TAGConv(in_channels, hidden_channels))
         self.convs2.append(TAGConv(hidden_channels, hidden_channels))
         self.convs2.append(TAGConv(hidden_channels, out_channels))
-        self.num_layers2 = len(self.convs)
+        self.num_layers2 = len(self.convs2)
 
-        self.linear = torch.nn.Linear(2, 1)
+        self.convs3 = torch.nn.ModuleList()
+        self.convs3.append(SAGEConv(in_channels, hidden_channels))
+        self.convs3.append(SAGEConv(hidden_channels, hidden_channels))
+        self.convs3.append(SAGEConv(hidden_channels, out_channels))
+        self.num_layers3 = len(self.convs3)
+
+        # self.convs4 = torch.nn.ModuleList()
+        # self.convs4.append(ResGatedGraphConv(in_channels, hidden_channels))
+        # self.convs4.append(ResGatedGraphConv(hidden_channels, hidden_channels))
+        # self.convs4.append(ResGatedGraphConv(hidden_channels, out_channels))
+        # self.num_layers4 = len(self.convs)
+
+
+        self.linear = torch.nn.Linear(3, 1)
 
     def forward(self, data):
         # print(dir(data))
         x, edge_index = data.x, data.edge_index
         x_1 = torch.clone(x)
-        x_2 = torch.clone(x)
+        
+        # x_4 = torch.clone(x)
         for i in range(self.num_layers):
             x_1 = self.convs[i](x_1, edge_index)
             if i != self.num_layers - 1:
                 x_1 = F.relu(x_1)
-                # x_1 = F.dropout(x_1, p=0.5)
-
+        
+        x_2 = torch.clone(x)
         for i in range(self.num_layers2):
             x_2 = self.convs2[i](x_2, edge_index)
             if i != self.num_layers2 - 1:
                 x_2 = F.relu(x_2)
-                # x_2 = F.dropout(x_2, p=0.5)
-        # Label Normalization
 
-        x = torch.cat([x_1, x_2], dim=1)
+
+        x_3 = torch.clone(x)
+        for i in range(self.num_layers3):
+            x_3 = self.convs3[i](x_3, edge_index)
+            if i!= self.num_layers3 - 1:
+                x_3 = F.relu(x_3)
+
+
+        x = torch.cat([x_1, x_2, x_3], dim=1)
+         
+
         # x = x_1
         x = self.linear(x)
         x = F.relu(x)
-        x_i = F.dropout(x, p=0.98)
+        x_i = F.dropout(x, p=0.95)
         x = torch.where(data.y == 0., x_i, x)
         return x
 
-        
+        # alu4, des, clma, s38417
 def main(options):
+    
     def train():
         model.train()
         loss_all = 0

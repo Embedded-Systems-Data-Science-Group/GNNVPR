@@ -58,9 +58,11 @@ def main(options):
         shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
     print("--- Loading CSV Data took %s seconds ---" % (time.time() - t1))
     t2 = time.time()
-    model2 = model.GNNVPR(14, 4, 1).to(device)
+    model2 = model.GNNVPR(14, 3, 1).to(device)
     model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.pt'))
     model2.eval()
+    for param in model2.parameters():
+        param.grad = None
     print("--- Model Loading took %s seconds ---" % (time.time() - t2))
     t4 = time.time()
     dataset = model.GNNDataset(options.inputDirectory,
