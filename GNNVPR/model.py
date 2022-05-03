@@ -366,23 +366,21 @@ class GNNVPRL(pl.LightningModule):
 
         self.hidden = 3
 
-        self.GATSequential = Sequential("x, edge_index", [
+        self.GATSequential = Sequential("x, edge_index, batch", [
             (GATv2Conv(self.num_features, self.hidden), "x, edge_index -> x1"),
             (ReLU(), "x1 -> x1d"),
             (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x2"),
-            (ReLU(), "x2 -> x2d"),
-            (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x3"),
-            (ReLU(), "x3 -> x3d"),
+            (ReLU(), "x2 -> x3d"),
             (GATv2Conv(self.hidden, self.num_targets), "x3d, edge_index -> x4d")])
 
-        self.TAGSequential = Sequential("x, edge_index", [
+        self.TAGSequential = Sequential("x, edge_index, batch", [
             (TAGConv(self.num_features, self.hidden), "x, edge_index -> x1"),
             (ReLU(), "x1 -> x1t"),
             (TAGConv(self.hidden, self.hidden), "x1t, edge_index -> x2"),
             (ReLU(), "x2 -> x2t"),
             (TAGConv(self.hidden, self.num_targets), "x2t, edge_index -> x3t")])
         
-        self.SAGESequential = Sequential("x, edge_index", [
+        self.SAGESequential = Sequential("x, edge_index, batch", [
             (SAGEConv(self.num_features, self.hidden), "x, edge_index -> x1"),
             (ReLU(), "x1 -> x1s"),
             (SAGEConv(self.hidden, self.hidden), "x1s, edge_index -> x2"),
@@ -397,16 +395,22 @@ class GNNVPRL(pl.LightningModule):
         self.total_nodes = 0
 
     def forward(self, data):
+        data = data.to(device)
         x, edge_index = data.x, data.edge_index
-        x1 = self.GATSequential(x, edge_index)
-        x2 = self.TAGSequential(x, edge_index)
-        x3 = self.SAGESequential(x, edge_index)
+        x1 = self.GATSequential(x, edge_index, data.batch)
+        x2 = self.TAGSequential(x, edge_index, data.batch)
+        x3 = self.SAGESequential(x, edge_index, data.batch)
         x4 = torch.cat((x1, x2, x3), dim=1)
+        x = global_mean_pool(x, data.batch)
         x = self.Linear(x4)
         x = F.relu(x)
         x_i = F.dropout(x, p=0.95)
         x = torch.where(data.y == 0., x_i, x)
+       
         return x
+
+    def predict_step(self, data, data_idx, dataloader_idx):
+        return self(data)
 
     def training_step(self, data, batch_idx):
         y_pred = self.forward(data)
@@ -425,9 +429,17 @@ class GNNVPRL(pl.LightningModule):
         return {'avg_val_loss': avg_loss, 'log': tensorboard_logs}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.parameters(), lr=3e-4)
         return optimizer
 
+    def test_step(self, data, batch_idx):
+        y_pred = self.forward(data)
+        loss = torch.nn.SmoothL1Loss()(y_pred, data.y)
+        # return y_pred
+        return {'test_loss': loss}
+
+    def test_epoch_end(self, outputs):
+        self.log("Test Loss: {}".format(outputs['test_loss']))
 class GNNVPR(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GNNVPR, self).__init__()
@@ -556,15 +568,16 @@ def main(options):
     print("Starting Training: on device: ", device)
     lightning_model = GNNVPRL()
 
-    num_epochs = 30
+    num_epochs = 100
     val_check_interval = len(train_loader)
 
-    trainer = pl.Trainer(max_epochs=num_epochs,
+    trainer = pl.Trainer(precision=16,
+                        max_epochs=num_epochs,
                          val_check_interval=val_check_interval,
                          gpus=[0])
                          
     trainer.fit(lightning_model, train_loader, val_loader)
-    trainer.save_checkpoint('model.ckpt')
+    trainer.save_checkpoint('model.ckpt', weights_only=True)
 
 
 

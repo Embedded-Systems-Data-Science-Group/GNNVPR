@@ -28,6 +28,8 @@ import torch_geometric.nn.dense
 import torch_geometric.nn.pool
 import tqdm
 from progress.bar import Bar
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
 from sklearn.metrics import mean_absolute_error, r2_score
 from torch.cuda.amp import GradScaler, autocast
 from torch_geometric.data import (Batch, ClusterData, ClusterLoader, Data,
@@ -49,6 +51,7 @@ embed_dim = 128
 def main(options):
     # device = "cpu"
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    
     t1 = time.time()
     proc_dir = options.inputDirectory+"processed/"
     for file in glob.glob(os.path.join(proc_dir, "*.pt")):
@@ -58,11 +61,17 @@ def main(options):
         shutil.copy(file, os.path.join(dest_dir, os.path.basename(file)))
     print("--- Loading CSV Data took %s seconds ---" % (time.time() - t1))
     t2 = time.time()
-    model2 = model.GNNVPR(14, 3, 1).to(device)
-    model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.pt'))
+    my_model = model.GNNVPRL()
+    trainer = Trainer(precision=16,gpus=[0])
+    # model2 = model.GNNVPRL().to(device)
+    model2 = my_model.load_from_checkpoint('/mnt/e/benchmarks/model.ckpt')
+    model2 = model2.to(device)
     model2.eval()
-    for param in model2.parameters():
-        param.grad = None
+    # model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.ckpt'))
+    # model2.eval()
+
+    # for param in model2.parameters():
+    #     param.grad = None
     print("--- Model Loading took %s seconds ---" % (time.time() - t2))
     t4 = time.time()
     dataset = model.GNNDataset(options.inputDirectory,
@@ -72,11 +81,16 @@ def main(options):
     t3 = time.time()
     # test_loader = DataLoader(dataset, batch_size=1)
     test_loader = dataset
+    # print(dir(trainer))
+    # predictions = trainer.predict(model2, dataloaders=test_loader)
+    # print(dir(predictions))
     for data in test_loader:
         # for data in loader:
+        # data = data.to(device)
+        with torch.no_grad():
+            pred = model2(data).detach().cpu().numpy()
+    
         t5 = time.time()
-        data = data.to(device)
-        pred = model2(data).detach().cpu().numpy()
         print("--- Direct Model Inference took %s seconds ---" % (time.time() - t5))
         # * Measure time for this. 
         # * Save directly to csv?

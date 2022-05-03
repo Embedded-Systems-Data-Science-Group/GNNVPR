@@ -9,6 +9,7 @@ import os
 import pandas as pd
 import time
 import re
+from torch_sparse import SparseTensor
 from sklearn.preprocessing import OneHotEncoder
 from functools import lru_cache
 import networkx as nx
@@ -38,10 +39,11 @@ def parse_edge_features(f):
         start_time = time.time()
         df = pd.read_csv(f)
         edge_index = [[], []]
-        start_time = time.time()   
+        # start_time = time.time()   
         edge_index[0] = df['src_node'].values
         edge_index[1] = df['sink_node'].values
-
+    # convert edge_index to np array
+    # return SparseTensor.from_coo(edge_index)
     return torch.tensor(edge_index, dtype=torch.long)
 
  
@@ -61,9 +63,12 @@ def parse_node_features(f, g):
         df['present_cost'] = df['present_cost'] - 1
         y = df['present_cost'].values.tolist()
         y = [[i] for i in y]
-    return torch.tensor(x, dtype=torch.float),\
-        torch.tensor(y, dtype=torch.float)
 
+
+        y = torch.tensor(y, dtype=torch.float)
+        x = torch.tensor(x, dtype=torch.float)
+       
+    return x, y
 
 def main(options):
     print("To be Implemented.")
