@@ -24,6 +24,7 @@ import torch
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from torch.nn import ReLU, Dropout, Linear
+from torch_geometric.nn.norm import BatchNorm
 import torch_geometric.nn.conv
 from torch_geometric.nn.conv import SAGEConv, GraphConv, TAGConv, GATConv, GATv2Conv, ResGatedGraphConv
 # Try NNConv, GATv2Conv, GINConv, update dependencies. 
@@ -368,31 +369,42 @@ class GNNVPRL(pl.LightningModule):
 
         self.GATSequential = Sequential("x, edge_index, batch", [
             (GATv2Conv(self.num_features, self.hidden), "x, edge_index -> x1"),
-            (ReLU(), "x1 -> x1d"),
+            (BatchNorm(self.hidden), "x1 -> x1d"),
+            (ReLU(), "x1d -> x1d"),
             (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x2"),
-            (ReLU(), "x2 -> x3d"),
+            (BatchNorm(self.hidden), "x2 -> x3d"),
+            (ReLU(), "x3d -> x3d"),
             (GATv2Conv(self.hidden, self.num_targets), "x3d, edge_index -> x4d")])
 
         self.TAGSequential = Sequential("x, edge_index, batch", [
             (TAGConv(self.num_features, self.hidden), "x, edge_index -> x1"),
-            (ReLU(), "x1 -> x1t"),
+            (BatchNorm(self.hidden), "x1 -> x1t"),
+            (ReLU(), "x1t -> x1t"),
             (TAGConv(self.hidden, self.hidden), "x1t, edge_index -> x2"),
-            (ReLU(), "x2 -> x2t"),
+            (BatchNorm(self.hidden), "x2 -> x2t"),
+            (ReLU(), "x2t -> x2t"),
             (TAGConv(self.hidden, self.num_targets), "x2t, edge_index -> x3t")])
-        
+    
+        self.hidden2 = 32
         self.SAGESequential = Sequential("x, edge_index, batch", [
-            (SAGEConv(self.num_features, self.hidden), "x, edge_index -> x1"),
-            (ReLU(), "x1 -> x1s"),
-            (SAGEConv(self.hidden, self.hidden), "x1s, edge_index -> x2"),
-            (ReLU(), "x2 -> x2s"),
-            (SAGEConv(self.hidden, self.num_targets), "x2s, edge_index -> x3s")])
+            (SAGEConv(self.num_features, self.hidden2), "x, edge_index -> x1"),
+            (BatchNorm(self.hidden2), "x1 -> x1s"),
+            (ReLU(), "x1s -> x1s"),
+            (SAGEConv(self.hidden2, self.hidden2), "x1s, edge_index -> x2"),
+            (BatchNorm(self.hidden2), "x2 -> x2s"),
+            (ReLU(), "x2s -> x2s"),
+            (SAGEConv(self.hidden2, self.num_targets), "x2s, edge_index -> x3s")])
 
-        self.Linear = Linear(self.hidden, self.num_targets)
+        self.Linear = Linear(3, self.num_targets)
+
+      
 
         self.GATSequential.to(device)
         self.TAGSequential.to(device)
         self.SAGESequential.to(device)
         self.total_nodes = 0
+
+       
 
     def forward(self, data):
         data = data.to(device)
@@ -568,11 +580,11 @@ def main(options):
     print("Starting Training: on device: ", device)
     lightning_model = GNNVPRL()
 
-    num_epochs = 100
+    num_epochs = 15
     val_check_interval = len(train_loader)
 
     trainer = pl.Trainer(precision=16,
-                        max_epochs=num_epochs,
+                         max_epochs=num_epochs,
                          val_check_interval=val_check_interval,
                          gpus=[0])
                          
