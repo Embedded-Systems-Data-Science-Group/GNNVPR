@@ -468,11 +468,11 @@ class GNNVPRL(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.parameters(), 
-            lr=3e-2, 
+            lr=3e-3, 
             weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,  
-            patience=1, 
+            patience=3, 
             verbose=True)
         
         return {
@@ -617,7 +617,7 @@ def main(options):
     len(train_dataset), len(val_dataset), len(test_dataset)
     print("Done")
 
-    batch_size = 1
+    batch_size = 2
     train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=6)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=6)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=6)
@@ -627,7 +627,7 @@ def main(options):
     print("Starting Training: on device: ", device)
     lightning_model = GNNVPRL()
 
-    num_epochs = 15
+    num_epochs = 10
     val_check_interval = len(train_loader)
 
     trainer = pl.Trainer(accelerator='gpu',
