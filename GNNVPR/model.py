@@ -22,6 +22,7 @@ import networkx as nx
 import torch
 # import 
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks.stochastic_weight_avg import StochasticWeightAveraging
 import torch.nn.functional as F
 from torch.nn import ReLU, Dropout, Linear
 from torch_geometric.nn.norm import BatchNorm
@@ -467,7 +468,7 @@ class GNNVPRL(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.parameters(), 
-            lr=3e-3, 
+            lr=3e-2, 
             weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,  
@@ -632,8 +633,10 @@ def main(options):
     trainer = pl.Trainer(accelerator='gpu',
                          precision=16,
                          max_epochs=num_epochs,
+                        #  gradient_clip_val=1,
                          val_check_interval=val_check_interval,
-                         devices=1)
+                         devices=1,
+                         callbacks=[StochasticWeightAveraging(swa_lrs=1e-2)])
                          
     # trainer.tune(lightning_model, train_loader, val_loader)                
     trainer.fit(lightning_model, train_loader, val_loader)
