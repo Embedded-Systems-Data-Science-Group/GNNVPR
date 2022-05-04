@@ -62,28 +62,29 @@ def main(options):
     print("--- Loading CSV Data took %s seconds ---" % (time.time() - t1))
     t2 = time.time()
     my_model = model.GNNVPRL()
-    trainer = Trainer(precision=16,gpus=[0])
+    trainer = Trainer(accelerator="gpu",
+                      precision=16,
+                      devices=1)
     # model2 = model.GNNVPRL().to(device)
     model2 = my_model.load_from_checkpoint('/mnt/e/benchmarks/model.ckpt')
-    model2 = model2.to(device)
+    # model2 = model2.to(device)
     model2.eval()
     # model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.ckpt'))
     # model2.eval()
 
     # for param in model2.parameters():
     #     param.grad = None
-    print("--- Model Loading took %s seconds ---" % (time.time() - t2))
+    # print("--- Model Loading took %s seconds ---" % (time.time() - t2))
     t4 = time.time()
     dataset = model.GNNDataset(options.inputDirectory,
                                                options.inputDirectory,
                                                options.outputDirectory)
-    print("--- Processing CSV took %s seconds ---" % (time.time() - t4))
+    # print("--- Processing CSV took %s seconds ---" % (time.time() - t4))
     t3 = time.time()
     # test_loader = DataLoader(dataset, batch_size=1)
     test_loader = dataset
-    # print(dir(trainer))
-    # predictions = trainer.predict(model2, dataloaders=test_loader)
-    # print(dir(predictions))
+    test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+   
     for data in test_loader:
         # for data in loader:
         # data = data.to(device)
@@ -91,11 +92,8 @@ def main(options):
             pred = model2(data).detach().cpu().numpy()
     
         t5 = time.time()
-        print("--- Direct Model Inference took %s seconds ---" % (time.time() - t5))
-        # * Measure time for this. 
-        # * Save directly to csv?
+        # print("--- Direct Model Inference took %s seconds ---" % (time.time() - t5))
         df = pd.DataFrame.from_dict(pred)
-        # df = df * 10
         df = df + 1
         
         df.to_csv('prediction.csv', index=False,

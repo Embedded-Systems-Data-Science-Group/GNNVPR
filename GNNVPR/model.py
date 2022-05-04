@@ -395,29 +395,52 @@ class GNNVPRL(pl.LightningModule):
             (ReLU(), "x2s -> x2s"),
             (SAGEConv(self.hidden2, self.num_targets), "x2s, edge_index -> x3s")])
 
+        # self.GraphSequential = Sequential("x, edge_index, batch", [
+        #     (GraphConv(self.num_features, self.hidden), "x, edge_index -> x1"),
+        #     (BatchNorm(self.hidden), "x1 -> x1g"),
+        #     (ReLU(), "x1g -> x1g"),
+        #     (GraphConv(self.hidden, self.hidden), "x1g, edge_index -> x2"),
+        #     (BatchNorm(self.hidden), "x2 -> x2g"),
+        #     (ReLU(), "x2g -> x2g"),
+        #     (GraphConv(self.hidden, self.num_targets), "x2g, edge_index -> x3g")])
+
+
+        # self.Seq = Sequential("x", [
+        #     (Linear(self.num_features, self.hidden), "x -> x1"),
+        #     (ReLU(), "x1 -> x1r"),
+        #     (Linear(self.hidden, self.hidden), "x1r -> x2"),
+
+        # self.NNConv()
+
+        # self.PSequential = Sequential("x, edge_index, batch", [
+        
+
+
         self.Linear = Linear(3, self.num_targets)
 
       
 
-        self.GATSequential.to(device)
-        self.TAGSequential.to(device)
-        self.SAGESequential.to(device)
+        # self.GATSequential.to(device)
+        # self.TAGSequential.to(device)
+        # self.SAGESequential.to(device)
+        # self.GraphSequential.to(device)
         self.total_nodes = 0
 
        
 
     def forward(self, data):
-        data = data.to(device)
+        # data = data.to(device)
         x, edge_index = data.x, data.edge_index
         x1 = self.GATSequential(x, edge_index, data.batch)
         x2 = self.TAGSequential(x, edge_index, data.batch)
         x3 = self.SAGESequential(x, edge_index, data.batch)
+        # x4 = self.GraphSequential(x, edge_index, data.batch)
         x4 = torch.cat((x1, x2, x3), dim=1)
         x = global_mean_pool(x, data.batch)
         x = self.Linear(x4)
         x = F.relu(x)
         x_i = F.dropout(x, p=0.95)
-        x = torch.where(data.y == 0., x_i, x)
+        x = torch.where(data.y == 0, x_i, x)
        
         return x
 
@@ -437,12 +460,29 @@ class GNNVPRL(pl.LightningModule):
     
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        self.log('val_loss', avg_loss)
         tensorboard_logs = {'val_loss': avg_loss}
-        return {'avg_val_loss': avg_loss, 'log': tensorboard_logs}
+        return {'val_loss': avg_loss, 'log': tensorboard_logs}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=3e-4)
-        return optimizer
+        optimizer = torch.optim.Adam(
+            self.parameters(), 
+            lr=3e-3, 
+            weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,  
+            patience=1, 
+            verbose=True)
+        
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'monitor': 'val_loss',
+                'frequency': 1
+            }
+           }
+
 
     def test_step(self, data, batch_idx):
         y_pred = self.forward(data)
@@ -475,6 +515,9 @@ class GNNVPR(torch.nn.Module):
         self.convs3.append(SAGEConv(hidden_channels, hidden_channels))
         self.convs3.append(SAGEConv(hidden_channels, out_channels))
         self.num_layers3 = len(self.convs3)
+
+
+        
 
         # self.convs4 = torch.nn.ModuleList()
         # self.convs4.append(ResGatedGraphConv(in_channels, hidden_channels))
@@ -533,9 +576,9 @@ def main(options):
 
         ## Fix the Optimizer here, lol. 
         for data in train_loader:
-            data = data.to(device)
+            # data = data.to(device)
             output = model(data)
-            target = data.y.to(device)
+            # target = data.y.to(device)
             loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
             # loss.backward()
             optimizer.zero_grad()
@@ -556,7 +599,7 @@ def main(options):
             # for loader in train_loader:
             #     loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
             for load in train_loader:
-                load = load.to(device)
+                # load = load.to(device)
                 pred = model(load).detach().cpu().numpy()
                 target = load.y.detach().cpu().numpy()
                 maes.append(mean_absolute_error(target, pred))               
@@ -573,9 +616,12 @@ def main(options):
     len(train_dataset), len(val_dataset), len(test_dataset)
     print("Done")
 
-    train_loader = train_dataset
-    val_loader = val_dataset
-    test_loader = test_dataset
+    batch_size = 1
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=6)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=6)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=6)
+    # val_loader = val_dataset
+    # test_loader = test_dataset
 
     print("Starting Training: on device: ", device)
     lightning_model = GNNVPRL()
@@ -583,11 +629,13 @@ def main(options):
     num_epochs = 15
     val_check_interval = len(train_loader)
 
-    trainer = pl.Trainer(precision=16,
+    trainer = pl.Trainer(accelerator='gpu',
+                         precision=16,
                          max_epochs=num_epochs,
                          val_check_interval=val_check_interval,
-                         gpus=[0])
+                         devices=1)
                          
+    # trainer.tune(lightning_model, train_loader, val_loader)                
     trainer.fit(lightning_model, train_loader, val_loader)
     trainer.save_checkpoint('model.ckpt', weights_only=True)
 
