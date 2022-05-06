@@ -44,6 +44,7 @@ def parse_edge_features(f):
         edge_index[1] = df['sink_node'].values
     # convert edge_index to np array
     # return SparseTensor.from_coo(edge_index)
+    edge_index = np.array(edge_index)
     return torch.tensor(edge_index, dtype=torch.long)
 
  
@@ -64,7 +65,7 @@ def parse_node_features(f, g):
         y = df['present_cost'].values.tolist()
         y = [[i] for i in y]
 
-
+        # y = np.array(y)
         y = torch.tensor(y, dtype=torch.float)
         x = torch.tensor(x, dtype=torch.float)
        

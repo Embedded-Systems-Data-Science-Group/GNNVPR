@@ -114,11 +114,11 @@ run_benchmark2() {
 
 # TODO: This one
 # run_benchmark "EARCH MCNC GNN Binary Search" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSD"
-# run_benchmark "EARCH MCNC GNN Default" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSG"
+run_benchmark "EARCH MCNC GNN Default" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSG"
 
 
 # run_benchmark "STRATXIV MCNC Default" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSD"
-run_benchmark "STRATXIV MCNC GNN" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSG"
+# run_benchmark "STRATXIV MCNC GNN" "$arch_dir1" "$MCNC" "$STRATXIV" "$ARGSG"
 
 # run_benchmark2 "EARCH MCNC GNN Binary Search" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSDB"
 # run_benchmark2 "EARCH MCNC GNN Binary Search" "$arch_dir2" "$MCNC" "$EARCH" "$ARGSGB"

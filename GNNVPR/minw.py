@@ -16,9 +16,9 @@ def main(options):
 
     a_key = helper(options.arch).strip()
     c_key = helper(options.circuit).strip()
-    df = pd.read_csv("/mnt/e/benchmarks/minw.csv")
+    df = pd.read_csv("/mnt/d/benchmarks/minw.csv")
     df = df.set_index(['architecture', 'circuit'])
-    ac_key  = even(int(df.loc[(a_key, c_key)]['minw']*1.20))
+    ac_key  = even(int(df.loc[(a_key, c_key)]['minw']*1.0))
 
     # The Collection Shell Script will capture this output:
     print(ac_key)

@@ -46,10 +46,7 @@ from torch_geometric.utils.convert import from_networkx, to_networkx
 
 import parse
 
-# GLOBALS: 
-embed_dim = 128
-use_FP16=False
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class TrainNodes:
     def __init__(self,
@@ -415,22 +412,12 @@ class GNNVPRL(pl.LightningModule):
 
         # self.PSequential = Sequential("x, edge_index, batch", [
         
-
-
         self.Linear = Linear(3, self.num_targets)
 
-      
-
-        # self.GATSequential.to(device)
-        # self.TAGSequential.to(device)
-        # self.SAGESequential.to(device)
-        # self.GraphSequential.to(device)
-        self.total_nodes = 0
 
        
 
     def forward(self, data):
-        # data = data.to(device)
         x, edge_index = data.x, data.edge_index
         x1 = self.GATSequential(x, edge_index, data.batch)
         x2 = self.TAGSequential(x, edge_index, data.batch)
@@ -441,7 +428,7 @@ class GNNVPRL(pl.LightningModule):
         x = self.Linear(x4)
         x = F.relu(x)
         x_i = F.dropout(x, p=0.95)
-        x = torch.where(data.y == 0, x_i, x)
+        x = torch.where(data.y == 0., x_i, x)
        
         return x
 
@@ -468,11 +455,11 @@ class GNNVPRL(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.parameters(), 
-            lr=3e-3, 
+            lr=3e-3,
             weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,  
-            patience=3, 
+            patience=1, 
             verbose=True)
         
         return {
@@ -493,147 +480,36 @@ class GNNVPRL(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         self.log("Test Loss: {}".format(outputs['test_loss']))
-class GNNVPR(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels):
-        super(GNNVPR, self).__init__()
-     
-      
-        self.convs = torch.nn.ModuleList()
-        self.convs.append(GATv2Conv(in_channels, hidden_channels))
-        self.convs.append(GATv2Conv(hidden_channels, hidden_channels))
-        self.convs.append(GATv2Conv(hidden_channels, hidden_channels))
-        self.convs.append(GATv2Conv(hidden_channels, out_channels))
-        self.num_layers = len(self.convs)
 
-        self.convs2 = torch.nn.ModuleList()
-        self.convs2.append(TAGConv(in_channels, hidden_channels))
-        self.convs2.append(TAGConv(hidden_channels, hidden_channels))
-        self.convs2.append(TAGConv(hidden_channels, out_channels))
-        self.num_layers2 = len(self.convs2)
-
-        self.convs3 = torch.nn.ModuleList()
-        self.convs3.append(SAGEConv(in_channels, hidden_channels))
-        self.convs3.append(SAGEConv(hidden_channels, hidden_channels))
-        self.convs3.append(SAGEConv(hidden_channels, out_channels))
-        self.num_layers3 = len(self.convs3)
-
-
-        
-
-        # self.convs4 = torch.nn.ModuleList()
-        # self.convs4.append(ResGatedGraphConv(in_channels, hidden_channels))
-        # self.convs4.append(ResGatedGraphConv(hidden_channels, hidden_channels))
-        # self.convs4.append(ResGatedGraphConv(hidden_channels, out_channels))
-        # self.num_layers4 = len(self.convs)
-
-
-        self.linear = torch.nn.Linear(3, 1)
-
-    def forward(self, data):
-        # print(dir(data))
-        x, edge_index = data.x, data.edge_index
-        x_1 = torch.clone(x)
-        
-        # x_4 = torch.clone(x)
-        for i in range(self.num_layers):
-            x_1 = self.convs[i](x_1, edge_index)
-            if i != self.num_layers - 1:
-                x_1 = F.relu(x_1)
-        
-        x_2 = torch.clone(x)
-        for i in range(self.num_layers2):
-            x_2 = self.convs2[i](x_2, edge_index)
-            if i != self.num_layers2 - 1:
-                x_2 = F.relu(x_2)
-
-
-        x_3 = torch.clone(x)
-        for i in range(self.num_layers3):
-            x_3 = self.convs3[i](x_3, edge_index)
-            if i!= self.num_layers3 - 1:
-                x_3 = F.relu(x_3)
-
-
-        x = torch.cat([x_1, x_2, x_3], dim=1)
-         
-
-        # x = x_1
-        x = self.linear(x)
-        x = F.relu(x)
-        x_i = F.dropout(x, p=0.95)
-        x = torch.where(data.y == 0., x_i, x)
-        return x
-
-        # alu4, des, clma, s38417
 def main(options):
     
-    def train():
-        model.train()
-        loss_all = 0
-        total_nodes = 0
-        # for loader in train_loader:
-        #     # loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
-        #     loader = 
-
-        ## Fix the Optimizer here, lol. 
-        for data in train_loader:
-            # data = data.to(device)
-            output = model(data)
-            # target = data.y.to(device)
-            loss = torch.nn.SmoothL1Loss()(output.to(torch.float32), target)
-            # loss.backward()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            loss_all += loss.item() * data.num_nodes
-            total_nodes += data.num_nodes
-            # scalar.update()
-        
-        return loss_all / total_nodes
-
-    
-
-    def evaluate(loader):
-        model.eval()
-        maes = []
-        with torch.no_grad():
-            # for loader in train_loader:
-            #     loader = GraphSAINTNodeSampler(loader, batch_size=6000, num_steps=5)
-            for load in train_loader:
-                # load = load.to(device)
-                pred = model(load).detach().cpu().numpy()
-                target = load.y.detach().cpu().numpy()
-                maes.append(mean_absolute_error(target, pred))               
-        return sum(maes) / len(maes)
-
     print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
-    dataset = dataset.shuffle()
+    # dataset = dataset.shuffle()
     one_tenth_length = int(len(dataset) * 0.1)
     train_dataset = dataset[:one_tenth_length * 8]
-    val_dataset = dataset[one_tenth_length * 8:one_tenth_length * 9]
-    test_dataset = dataset[one_tenth_length * 9:]
-    len(train_dataset), len(val_dataset), len(test_dataset)
-    print("Done")
+    val_dataset = dataset[one_tenth_length * 8:]
+    # test_dataset = dataset[one_tenth_length * 9:]
+    # len(train_dataset), len(val_dataset)
+    # print("Done")
 
     batch_size = 2
     train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=6)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=6)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=6)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=6)
     # val_loader = val_dataset
     # test_loader = test_dataset
 
-    print("Starting Training: on device: ", device)
     lightning_model = GNNVPRL()
 
-    num_epochs = 10
+    num_epochs = 15
     val_check_interval = len(train_loader)
 
     trainer = pl.Trainer(accelerator='gpu',
                          precision=16,
                          max_epochs=num_epochs,
-                        #  gradient_clip_val=1,
+                        #  gradient_clip_val=0.5,
                          val_check_interval=val_check_interval,
                          devices=1,
                          callbacks=[StochasticWeightAveraging(swa_lrs=1e-2)])
