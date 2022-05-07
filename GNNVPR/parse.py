@@ -36,16 +36,15 @@ def FindSpecificFiles(directory, extension):
 
 def parse_edge_features(f):
     with open(f) as cF:
-        start_time = time.time()
         df = pd.read_csv(f)
         edge_index = [[], []]
-        # start_time = time.time()   
         edge_index[0] = df['src_node'].values
         edge_index[1] = df['sink_node'].values
-    # convert edge_index to np array
-    # return SparseTensor.from_coo(edge_index)
-    edge_index = np.array(edge_index)
-    return torch.tensor(edge_index, dtype=torch.long)
+
+    # edge_index = np.array(edge_index, dtype=np.long)
+    edge_index = torch.tensor(edge_index, dtype=torch.long)
+   
+    return edge_index
 
  
 def parse_node_features(f, g):
@@ -57,6 +56,8 @@ def parse_node_features(f, g):
         df = df.join(one_hot)
         df = df.apply(pd.to_numeric)
         x = df.values
+        x = torch.tensor(x, dtype=torch.float)
+        # print("Time to read features: ", t2 - t1)
     # Target
     with open(g) as cG:
         df = pd.read_csv(cG)
@@ -64,10 +65,10 @@ def parse_node_features(f, g):
         df['present_cost'] = df['present_cost'] - 1
         y = df['present_cost'].values.tolist()
         y = [[i] for i in y]
-
         # y = np.array(y)
+        # y = y.reshape(-1, 1)
         y = torch.tensor(y, dtype=torch.float)
-        x = torch.tensor(x, dtype=torch.float)
+        # print(y.shape)
        
     return x, y
 

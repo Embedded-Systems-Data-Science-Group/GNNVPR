@@ -66,7 +66,7 @@ def main(options):
                       precision=16,
                       devices=1)
     # model2 = model.GNNVPRL().to(device)
-    model2 = my_model.load_from_checkpoint('/mnt/e/benchmarks/model-perfect.ckpt')
+    model2 = my_model.load_from_checkpoint('/mnt/e/benchmarks/model.ckpt')
     # model2 = model2.to(device)
     model2.eval()
     # model2.load_state_dict(torch.load('/mnt/e/benchmarks/model.ckpt'))

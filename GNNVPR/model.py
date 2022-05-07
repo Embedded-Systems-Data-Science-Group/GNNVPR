@@ -16,7 +16,7 @@ import os
 import time
 from multiprocessing import Pool, cpu_count, freeze_support
 from optparse import OptionParser
-
+import pandas as pd
 
 import networkx as nx
 import torch
@@ -39,7 +39,8 @@ from torch_geometric.data import (Batch, ClusterData, ClusterLoader, Data,
                                   DataLoader, Dataset, GraphSAINTNodeSampler,
                                   GraphSAINTRandomWalkSampler, InMemoryDataset,
                                   NeighborSampler)
-from torch_geometric.nn import MessagePassing, Sequential, global_mean_pool
+                                  
+from torch_geometric.nn import MessagePassing, Sequential, global_add_pool, global_max_pool, max_pool_neighbor_x
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.utils import add_self_loops, remove_self_loops
 from torch_geometric.utils.convert import from_networkx, to_networkx
@@ -304,6 +305,8 @@ class GNNDataset(Dataset):
                  pre_transform=None, dataExtensions=".csv"):
         # print("Called init")
         self.dataDir = inDir
+        self.graph_edges = list()
+        self.graph_nodes = list()
         self.outDir = outDir
         self.length = len(glob.glob(os.path.join(self.dataDir, "*-nodes*.csv")))
         self.pathdict = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
@@ -327,24 +330,26 @@ class GNNDataset(Dataset):
         print("Called download")
         
     def single_process(self, node_path):
+        # print("Parsing node_path: ", node_path)n
         num = self.indices2[node_path]
         target_path = node_path.partition("-")[0]+"-hcost.csv"
         x, y = parse.parse_node_features(node_path, target_path)
         edge_path = node_path.partition("-")[0]+"-edges.csv"
         edge_index = parse.parse_edge_features(edge_path)
+        # Print the number of nodes and edges to a CSV file
         data = Data(x=x, y=y, edge_index=edge_index)
         torch.save(data, os.path.join(self.processed_paths[num]))
-
+        # print("Successfully parsed node_path: ", node_path)
     def process(self):
         print("Called process")
         # pool = Pool(cpu_count())
         paths = glob.glob(os.path.join(self.dataDir, "*-nodes*.csv"))
         with Pool(processes=8) as p:
             with tqdm.tqdm(total=self.length) as pbar:
+            
                 for i, _ in enumerate(p.imap_unordered(self.single_process, paths)):
                     pbar.update()
         print("Finished Processing")
-        
     def len(self):
         return len(self.processed_file_names)
     
@@ -358,18 +363,20 @@ class GNNVPRL(pl.LightningModule):
         super(GNNVPRL, self).__init__()
 
         self.num_features = kwargs['num_features'] \
-            if "num_features" in kwargs.keys() else 14
+            if "num_features" in kwargs.keys() else 15
 
         self.num_targets = kwargs['num_features'] \
             if "num_targets" in kwargs.keys() else 1
 
         self.hidden = 3
+        self.hidden2 = 32
 
         self.GATSequential = Sequential("x, edge_index, batch", [
             (GATv2Conv(self.num_features, self.hidden), "x, edge_index -> x1"),
             (BatchNorm(self.hidden), "x1 -> x1d"),
             (ReLU(), "x1d -> x1d"),
             (GATv2Conv(self.hidden, self.hidden), "x1d, edge_index -> x2"),
+            (global_max_pool, "x2, batch -> x2s"),
             (BatchNorm(self.hidden), "x2 -> x3d"),
             (ReLU(), "x3d -> x3d"),
             (GATv2Conv(self.hidden, self.num_targets), "x3d, edge_index -> x4d")])
@@ -379,16 +386,18 @@ class GNNVPRL(pl.LightningModule):
             (BatchNorm(self.hidden), "x1 -> x1t"),
             (ReLU(), "x1t -> x1t"),
             (TAGConv(self.hidden, self.hidden), "x1t, edge_index -> x2"),
+            (global_max_pool, "x2, batch -> x2s"),
             (BatchNorm(self.hidden), "x2 -> x2t"),
             (ReLU(), "x2t -> x2t"),
             (TAGConv(self.hidden, self.num_targets), "x2t, edge_index -> x3t")])
     
-        self.hidden2 = 32
+        
         self.SAGESequential = Sequential("x, edge_index, batch", [
             (SAGEConv(self.num_features, self.hidden2), "x, edge_index -> x1"),
             (BatchNorm(self.hidden2), "x1 -> x1s"),
             (ReLU(), "x1s -> x1s"),
             (SAGEConv(self.hidden2, self.hidden2), "x1s, edge_index -> x2"),
+            (global_max_pool, "x2, batch -> x2s"),
             (BatchNorm(self.hidden2), "x2 -> x2s"),
             (ReLU(), "x2s -> x2s"),
             (SAGEConv(self.hidden2, self.num_targets), "x2s, edge_index -> x3s")])
@@ -411,7 +420,6 @@ class GNNVPRL(pl.LightningModule):
         # self.NNConv()
 
         # self.PSequential = Sequential("x, edge_index, batch", [
-        
         self.Linear = Linear(3, self.num_targets)
 
 
@@ -419,12 +427,14 @@ class GNNVPRL(pl.LightningModule):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
+        # x = max_pool_neighbor_x(data)
         x1 = self.GATSequential(x, edge_index, data.batch)
         x2 = self.TAGSequential(x, edge_index, data.batch)
         x3 = self.SAGESequential(x, edge_index, data.batch)
         # x4 = self.GraphSequential(x, edge_index, data.batch)
         x4 = torch.cat((x1, x2, x3), dim=1)
-        x = global_mean_pool(x, data.batch)
+        # x = max_pool_neighbor_x(x)
+        # x = global_max_pool(x4, data.batch)
         x = self.Linear(x4)
         x = F.relu(x)
         x_i = F.dropout(x, p=0.95)
@@ -486,15 +496,24 @@ def main(options):
     print("Initializing Dataset & Batching")
     dataset = GNNDataset(options.inputDirectory,
                          options.inputDirectory, options.outputDirectory)
-    # dataset = dataset.shuffle()
+    dataset = dataset.shuffle()
+    # edges_list = list()
+    # nodes_list = list()
+    # for i in dataset:
+    #     edges_list.append(i.edge_index.shape[1])
+    #     nodes_list.append(i.x.shape[0])
+    # df = pd.DataFrame({"edges": edges_list, "nodes": nodes_list})
+    # df.to_csv("edges_nodes.csv")
+
+
     one_tenth_length = int(len(dataset) * 0.1)
-    train_dataset = dataset[:one_tenth_length * 8]
-    val_dataset = dataset[one_tenth_length * 8:]
+    train_dataset = dataset[:one_tenth_length * 9]
+    val_dataset = dataset[one_tenth_length * 9:]
     # test_dataset = dataset[one_tenth_length * 9:]
     # len(train_dataset), len(val_dataset)
     # print("Done")
 
-    batch_size = 2
+    batch_size = 1
     train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=6)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=6)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=6)
@@ -503,7 +522,7 @@ def main(options):
 
     lightning_model = GNNVPRL()
 
-    num_epochs = 15
+    num_epochs = 10
     val_check_interval = len(train_loader)
 
     trainer = pl.Trainer(accelerator='gpu',
@@ -511,12 +530,11 @@ def main(options):
                          max_epochs=num_epochs,
                         #  gradient_clip_val=0.5,
                          val_check_interval=val_check_interval,
-                         devices=1,
-                         callbacks=[StochasticWeightAveraging(swa_lrs=1e-2)])
+                         devices=1)
                          
     # trainer.tune(lightning_model, train_loader, val_loader)                
     trainer.fit(lightning_model, train_loader, val_loader)
-    trainer.save_checkpoint('model.ckpt', weights_only=True)
+    trainer.save_checkpoint('model-test.ckpt', weights_only=True)
 
 
 
